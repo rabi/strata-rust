@@ -201,6 +201,11 @@ CPU shim answering 0/refusing instead of faking. Every test skips with a printed
 reason when the shim has no device slots, so the workspace still tests green
 with no GPU — as verified on the dev box (58 tests, 6 skips printed).
 
+Measured on a GPU host (`giant18`): NVIDIA L4, cc 8.9, 58 SMs, 22.1 GiB, driver
+reported as 13030, CUDA shim built with the vendored sources — all 6 device
+tests pass through the vtable in 1.27 s, and the CPU-shim-refusal test's
+self-check correctly detected the CUDA build and skipped itself.
+
 **Phase 1 — Rust replaces `serve/`.** Easiest real win, and the only phase with no
 GPU in the loop. `serve/server.py:338` already launches the engine as
 `subprocess.Popen([exe, "--serve", *args], stdin=PIPE, stdout=PIPE)`. Because that
