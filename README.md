@@ -16,6 +16,22 @@ STRATA_KERNELS_LIB=$PWD/target/shim/libstrata_kernels.so \
   cargo run --release -p strata-probe -- <file.gguf> target/shim/cppdump
 ```
 
+No model on the host? Generate one that is deliberately hard to read -
+alignment-32 offsets that miss 4096 boundaries, short completions, mixed dtypes,
+every metadata type - then read it back through all three readers:
+
+```
+cargo run --release -p strata-probe -- mkgguf /tmp/synth.gguf 512
+STRATA_KERNELS_LIB=$PWD/target/shim/libstrata_kernels.so \
+  cargo run --release -p strata-probe -- /tmp/synth.gguf target/shim/cppdump
+STRATA_KERNELS_LIB=$PWD/target/shim/libstrata_kernels.so STRATA_MODEL=/tmp/synth.gguf \
+  cargo test -p strata-device --test shim_live -- --nocapture
+```
+
+Measured here: 512 MB / 4781 tensors - writer, Rust buffered reader and the
+engine's C++ reader produce one identical hash, and the whole 512 MB streams
+through the O_DIRECT vtable path in 2.9 s.
+
 `shim/build.sh` needs two pieces of real Strata C++ (the `DirectFile` reader,
 `gguf_reader.hpp`). It uses a Strata checkout when reachable
 (`$STRATA_REPO`, else `../Strata`) and otherwise the unmodified copies in

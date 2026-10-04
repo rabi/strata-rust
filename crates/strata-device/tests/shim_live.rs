@@ -130,6 +130,8 @@ fn real_model_streaming_if_available() {
     let mut buf = Pinned::new(k, 1 << 20).unwrap();
     let mut done = [IoCompletion::default(); 1];
     let mut checked = 0u64;
+    let mut tag = 0u64;
+    let mut tensors = 0u64;
     for t in g.tensors() {
         let bytes = strata_artifact::tensor_payload_bytes(t);
         if bytes == 0 || checked > 1 << 22 {
@@ -140,10 +142,16 @@ fn real_model_streaming_if_available() {
         let lo = off / 4096 * 4096;
         let len = ((off + want).div_ceil(4096) * 4096 - lo) as usize;
         let pre = (off - lo) as usize;
-        f.submit(lo, &mut buf.bytes_mut()[..len], 1).unwrap();
+        f.submit(lo, &mut buf.bytes_mut()[..len], tag).unwrap();
         assert_eq!(f.wait(&mut done, 10_000), 1);
         let got = done[0];
-        assert!(got.ok != 0 && (got.bytes as usize) >= pre + want as usize);
+        assert!(
+            got.ok != 0 && got.tag == tag && (got.bytes as usize) >= pre + want as usize,
+            "completion {:?} for {} at tag {tag}",
+            (got.tag, got.bytes, got.ok),
+            t.name
+        );
+        tag += 1;
         // and the bytes must agree with plain buffered reads of the same file
         let cpp = g.read_tensor(t).unwrap();
         assert_eq!(
@@ -151,6 +159,11 @@ fn real_model_streaming_if_available() {
             &cpp[..want as usize]
         );
         checked += want;
+        tensors += 1;
     }
+    eprintln!(
+        "streamed {checked} bytes across {tensors} tensors over the ABI, byte-compared \
+         against buffered reads"
+    );
     assert!(checked > 0, "model had no readable tensors");
 }

@@ -12,14 +12,26 @@ use std::process::Command;
 use strata_artifact::{tensor_payload_bytes, GgufFile};
 use strata_device::{DeviceFile, IoCompletion, Pinned, Shim};
 
+mod mkgguf;
+
 const CHUNK: usize = 1 << 20; // one pinned buffer, reused for every tensor
 
 fn main() {
     let mut args = std::env::args().skip(1);
     let Some(path) = args.next() else {
         eprintln!("usage: strata-probe <file.gguf> [cppdump]");
+        eprintln!("       strata-probe mkgguf <out.gguf> [size_mb=64]");
         std::process::exit(2);
     };
+    if path == "mkgguf" {
+        let Some(out) = args.next() else {
+            eprintln!("mkgguf needs an output path");
+            std::process::exit(2);
+        };
+        let mb = args.next().map_or(64, |s| s.parse::<u64>().unwrap_or(64));
+        mkgguf::mkgguf(&out, mb);
+        return;
+    }
     let cppdump = args.next();
 
     let Some(res) = Shim::try_load() else {
@@ -193,32 +205,32 @@ fn main() {
     }
 }
 
-struct Fnv(u64);
+pub(crate) struct Fnv(u64);
 impl Fnv {
     // Strata's own seed (src/core/pinned.cu): the FNV-1a basis with its last
     // digit dropped. Parity with the engine's checksums matters more than the
     // RFC's constant - both readers must start from the same place.
-    fn new() -> Fnv {
+    pub(crate) fn new() -> Fnv {
         Fnv(1469598103934665603)
     }
-    fn hash(data: &[u8]) -> u64 {
+    pub(crate) fn hash(data: &[u8]) -> u64 {
         let mut h = Fnv::new();
         h.fold_in(data);
         h.0
     }
-    fn fold_in(&mut self, data: &[u8]) {
+    pub(crate) fn fold_in(&mut self, data: &[u8]) {
         for &b in data {
             self.0 ^= b as u64;
             self.0 = self.0.wrapping_mul(0x100000001b3);
         }
     }
-    fn get(&self) -> u64 {
+    pub(crate) fn get(&self) -> u64 {
         self.0
     }
 }
 
 /// Compare the C++ reader's dump against the Rust reader and the ABI bytes.
-fn check_against_cpp(
+pub(crate) fn check_against_cpp(
     json: &str,
     g: &GgufFile,
     rust_first_hex: &str,
