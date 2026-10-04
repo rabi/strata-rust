@@ -1,0 +1,28 @@
+  complete pack at the default geometry passes check_all                   ok
+  a GDN and a QSA layer both pass                                          ok
+CORPUS good_all	ok
+CORPUS good_layer0	ok
+CORPUS good_layer3	ok
+  missing indexer.k_proj names itself                                      ok
+CORPUS missing_kproj	layer 3: missing blk.3.indexer.k_proj.weight
+  check_all refuses the pack with the tensor missing                       ok
+CORPUS missing_kproj_all	layer 3: missing blk.3.indexer.k_proj.weight
+  k_proj with the query head count refused, has/want in the message        ok
+CORPUS kproj_query_sized	layer 3: blk.3.indexer.k_proj.weight ne1 is 512, the kernels require 128
+  transposed hc_attn_up refused on ne0                                     ok
+CORPUS up_transposed	layer 0: blk.0.hc_attn_up.weight ne0 is 10240, the kernels require 320
+  ne1 mismatch labelled ne1, not ne0                                       ok
+CORPUS ne1_mismatch	layer 0: blk.0.ffn_gate_inp.weight ne1 is 511, the kernels require 512
+  shexp gate stored f32 refused with both byte counts                      ok
+CORPUS shexp_gate_f32	layer 0: blk.0.ffn_gate_inp_shexp.weight is engine form 2 (10240 B), the kernels read it as form 1 (5120 B)
+  ssm_norm one element short refused on elements                           ok
+CORPUS ssm_norm_short	layer 0: blk.0.ssm_norm.weight elements is 127, the kernels require 128
+  a wrong GDN tensor on a QSA layer is not checked there                   ok
+CORPUS layer_neg1	layer -1 is outside 0..47
+CORPUS layer_48	layer 48 is outside 0..47
+  the last layer is in range                                               ok
+  interval 5 / 25 layers: 5 QSA + 20 GDN passes                            ok
+CORPUS interval5_all	ok
+  47 of the 48 layers checked, the 48th simply not checked                 ok
+CORPUS truncated_47	ok
+layout_corpus: all passed

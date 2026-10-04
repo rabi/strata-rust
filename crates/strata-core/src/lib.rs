@@ -6,4 +6,5 @@
 
 pub mod coupled_draft;
 pub mod host_memory;
+pub mod layout;
 pub mod sampler;
