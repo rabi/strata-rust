@@ -11,10 +11,16 @@ binary drives real files through it:
 ```
 ./shim/build.sh                       # -> target/shim/libstrata_kernels.so + cppdump
 STRATA_KERNELS_LIB=$PWD/target/shim/libstrata_kernels.so \
-  cargo test --offline                # 51 tests incl. live-ABI round trips
+  cargo test --offline                # 58 tests incl. live-ABI round trips
 STRATA_KERNELS_LIB=$PWD/target/shim/libstrata_kernels.so \
   cargo run --release -p strata-probe -- <file.gguf> target/shim/cppdump
 ```
+
+`shim/build.sh` needs two pieces of real Strata C++ (the `DirectFile` reader,
+`gguf_reader.hpp`). It uses a Strata checkout when reachable
+(`$STRATA_REPO`, else `../Strata`) and otherwise the unmodified copies in
+`shim/vendor/` — verified: a tree with no Strata checkout builds, tests 58/58,
+and the probe+cppdump produce the identical whole-model hash below.
 
 The probe opens a GGUF through the *real engine reader*
 (`strata::platform::DirectFile`, O_DIRECT, worker-thread completions) over the

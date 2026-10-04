@@ -165,9 +165,10 @@ cross-checked with a standalone C shim: C reads the requested ABI number (1 and
 **Phase 0 — pure logic, no device, no I/O. Done for these crates.**
 `strata-spec` (controller, draft policy, suffix drafter), `strata-core`
 (`penalty_rows`, coupled-draft cell/ring math), `strata-artifact` (GGUF v3 reader +
-split resolver), `strata-device` (the ABI contract as types). 51 tests, 0 clippy
-warnings, no `unsafe` outside `strata-device`'s loader module and one
-`#[cfg(test)]` block, no external crates.
+split resolver), `strata-device` (the ABI contract as types). 0 clippy warnings,
+no `unsafe` outside `strata-device`'s loader module and one `#[cfg(test)]` block,
+no external crates; the workspace now carries 58 tests (counted with the CPU shim
+built; the 6 device tests skip without a CUDA shim).
 
 Why first: these are the modules with the most logic per line and the least device
 coupling, and every one ships with a C++ test whose assertions can be transcribed.
