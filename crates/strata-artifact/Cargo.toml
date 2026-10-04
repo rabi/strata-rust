@@ -1,0 +1,11 @@
+[package]
+name = "strata-artifact"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GGUF v3 reader (mmap, no ggml), shard resolution, architecture guard"
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "strata-probe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Loads the C++ shim and reads a GGUF through the ABI: the Rust side driving real Strata code"
+
+[dependencies]
+strata-device = { path = "../strata-device" }
+strata-artifact = { path = "../strata-artifact" }
+
+[lints]
+workspace = true

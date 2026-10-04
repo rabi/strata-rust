@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/strata-spec",
+    "crates/strata-core",
+    "crates/strata-artifact",
+    "crates/strata-device",
+    "crates/strata-probe",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.lints.rust]
+# denied workspace-wide; the one place that may `#[allow]` it is the vtable test in strata-device
+unsafe_code = "deny"

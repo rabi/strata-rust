@@ -1,0 +1,11 @@
+[package]
+name = "strata-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Engine core pieces in Rust: verify-window history, coupled draft arithmetic"
+
+[dependencies]
+
+[lints]
+workspace = true

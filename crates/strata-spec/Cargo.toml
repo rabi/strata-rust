@@ -1,0 +1,11 @@
+[package]
+name = "strata-spec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Speculation control: drafter choice, verify-window policy, suffix-lookup drafter"
+
+[dependencies]
+
+[lints]
+workspace = true
