@@ -5,4 +5,5 @@
 // `unsafe_code` is denied workspace-wide ([workspace.lints.rust] in Cargo.toml).
 
 pub mod coupled_draft;
+pub mod host_memory;
 pub mod sampler;

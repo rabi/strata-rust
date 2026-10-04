@@ -254,6 +254,23 @@ are the two that need the widest vtable, which is why they come after
 zero-coupling files (`conversation_memory`, `load_main`, `layout`) port with no ABI
 work at all and are the right way to start Phase 2.
 
+**Phase 2, module 1 — done: `conversation_memory` -> `strata-core::host_memory`.**
+The conversation cache's physical-RAM admission gate, 51 C++ lines with zero CUDA
+symbols. `mem_available` takes any `BufRead` (the C++ took an `istream`),
+`memory_admit` keeps the ordering that is the overflow defense (`available >=
+floor` first, then `allocation <= available - floor`), and unknown telemetry
+still fails closed — a machine that will not report free memory does not park
+caches. All 23 boolean checks from `conversation_memory_test.cpp` are
+transcribed 1:1 (11 malformed-telemetry cases, the boundaries, the u64 overflow
+probes, the torn-stream variant of the badbit check); the C++ test was built and
+run independently here first (23/23). The Windows provider branch
+(`GlobalMemoryStatusEx`) type-checked by compiling the cfg-flipped module with
+`--emit=metadata`, since the Windows rustup target would not install on this
+box; the layout assert caught a real error in the mirror struct (72 -> 64 bytes)
+before it shipped. The port adds one check the C++ could not make portably: on
+Linux the provider is not allowed to say unknown, because /proc/meminfo is
+always there. 67 workspace tests, 0 clippy, fmt clean.
+
 **Phase 3 — `generate.cpp` last.** It is 6,913 lines, it is the integration
 point (CLI, pipe protocol, prefill orchestration, image handling), and it is the
 single most CUDA-coupled file in group B (340 uses, 50 distinct symbols). Porting
