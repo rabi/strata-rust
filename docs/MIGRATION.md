@@ -206,6 +206,13 @@ reported as 13030, CUDA shim built with the vendored sources — all 6 device
 tests pass through the vtable in 1.27 s, and the CPU-shim-refusal test's
 self-check correctly detected the CUDA build and skipped itself.
 
+`mkgguf` output is machine-independent, which is the point of hashing it: the
+512 MB file hashes `30c489fd66fe95ad` identically on the dev box and on
+`giant18`, and on both machines writer, Rust buffered reader, the engine's C++
+mmap reader and the C++ O_DIRECT reader (536,871,408 bytes across 4,781 tensors)
+produce that one value. A synthetic file that reproduces bit-exactly across
+machines is reusable as a regression fixture.
+
 **Phase 1 — Rust replaces `serve/`.** Easiest real win, and the only phase with no
 GPU in the loop. `serve/server.py:338` already launches the engine as
 `subprocess.Popen([exe, "--serve", *args], stdin=PIPE, stdout=PIPE)`. Because that
