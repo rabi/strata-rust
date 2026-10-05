@@ -16,10 +16,18 @@
 // `unsafe_code` is denied workspace-wide ([workspace.lints.rust] in Cargo.toml).
 // `abi` is a pure data contract and stays clean; `shim` re-allows it locally —
 // dlopen and every call through a vtable slot are inherently unsafe — and is the
-// workspace's only non-test unsafe. The types shim hands out are safe to use.
+// workspace's non-test unsafe lives in those two files. The types they hand
+// out are safe to use.
 
 pub mod abi;
 pub mod shim;
+// the vtable calls through the snapshot slots are unsafe, like shim's
+#[allow(unsafe_code)]
+pub mod snapshot;
 
 pub use abi::*;
 pub use shim::{CapturedGraph, DeviceBuf, DeviceFile, Pinned, ReplayableGraph, Shim, Stream};
+pub use snapshot::{
+    DeviceRegion, IndexerBuffers, LayerKv, LayerState, Residency, RunningTarget, SessionDevice,
+    SnapshotDevice,
+};

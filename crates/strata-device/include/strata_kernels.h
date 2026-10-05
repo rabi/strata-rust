@@ -145,6 +145,21 @@ typedef struct StrataKernels {
                                      StrataStream stream);
     StrataStatus (*memcpy_d2h_async)(void* dst_host, const void* src_dev, uint64_t bytes,
                                      StrataStream stream);
+
+    /* ---- conversation snapshot. Appended within ABI v1. Synchronous: the
+     * snapshot contract is a park/resume path, never a decode step, so it uses
+     * cudaMemcpyDefault (the engine resolves either direction from the single
+     * pointer) and cudaDeviceSynchronize, exactly as conversation_state.cpp and
+     * conversation_snapshot.cpp do. The engine core keeps every address opaque
+     * and selects them by layer/region; these two slots are the only bytes the
+     * snapshot contract moves. The residency hooks (kv_stream_reset,
+     * kv_ring_restore) intentionally have no slots: until a build fills them,
+     * the core rejects any image whose state needs residency work, so a session
+     * that was never fully resident can never be admitted on a build that
+     * cannot make it readable. ---- */
+    StrataStatus (*memcpy_default)(void* dst, const void* src, uint64_t bytes,
+                                   char* err, size_t err_len);
+    StrataStatus (*device_sync)(char* err, size_t err_len);
 } StrataKernels;
 
 /* The shim's single entry point: fills `*out` with the vtable for this build
@@ -182,5 +197,5 @@ STRATA_STATIC_ASSERT(offsetof(DeviceInfo, total_bytes) == 24 && offsetof(DeviceI
                "DeviceInfo field order must match the Rust DeviceInfo");
 STRATA_STATIC_ASSERT(sizeof(IoCompletion) == 16, "IoCompletion must stay 16 bytes");
 STRATA_STATIC_ASSERT(offsetof(IoCompletion, bytes) == 8 && offsetof(IoCompletion, ok) == 12, "IoCompletion field order");
-STRATA_STATIC_ASSERT(sizeof(StrataKernels) == 28 * sizeof(void *), "StrataKernels is 28 vtable slots");
+STRATA_STATIC_ASSERT(sizeof(StrataKernels) == 30 * sizeof(void *), "StrataKernels is 30 vtable slots");
 #endif /* STRATA_KERNELS_H */

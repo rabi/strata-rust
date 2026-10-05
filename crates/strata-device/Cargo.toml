@@ -6,6 +6,7 @@ license.workspace = true
 description = "The C ABI between the Rust engine core and the C++/CUDA kernel + device layer"
 
 [dependencies]
+strata-core = { path = "../strata-core" }
 
 [lints]
 workspace = true

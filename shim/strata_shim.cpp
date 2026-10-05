@@ -304,6 +304,29 @@ StrataStatus abi_memcpy_d2h_async(void* dst_host, const void* src_dev, uint64_t 
                                           (cudaStream_t) stream);
     return e == cudaSuccess ? STRATA_OK : STRATA_ERROR;
 }
+
+/* The snapshot contract's two synchronous slots. The engine core hands one
+ * address per region and cudaMemcpyDefault resolves the direction, which is
+ * exactly what the C++ engine did with raw pointers. */
+StrataStatus abi_memcpy_default(void* dst, const void* src, uint64_t bytes,
+                                char* err, size_t err_len) {
+    if (bytes == 0) return STRATA_OK;
+    const cudaError_t e = cudaMemcpy(dst, src, (size_t) bytes, cudaMemcpyDefault);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_device_sync(char* err, size_t err_len) {
+    const cudaError_t e = cudaDeviceSynchronize();
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
 #endif  // STRATA_SHIM_CUDA
 
 }  // namespace
@@ -339,6 +362,8 @@ StrataStatus strata_kernels_load(uint32_t abi_version, StrataKernels* out, char*
     out->device_free = abi_device_free;
     out->memcpy_h2d_async = abi_memcpy_h2d_async;
     out->memcpy_d2h_async = abi_memcpy_d2h_async;
+    out->memcpy_default = abi_memcpy_default;
+    out->device_sync = abi_device_sync;
     /* sampler + coupled-draft slots land in Phase 2 alongside the kernel calls
      * they forward to; a shim build that lacks them leaves them NULL per the
      * append-only contract, and the Rust core falls back. */

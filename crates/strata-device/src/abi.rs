@@ -193,7 +193,7 @@ pub type CoupledDraftSample = unsafe extern "C" fn(
 /// the kernel with an illegal memory access reported by some later, unrelated
 /// synchronising call — the split is in the name for that reason.
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct StrataKernels {
     // ---- device / runtime
     pub device_count: Option<unsafe extern "C" fn() -> c_int>,
@@ -347,6 +347,25 @@ pub struct StrataKernels {
             stream: Stream,
         ) -> StrataStatus,
     >,
+
+    // ---- conversation snapshot (appended within ABI v1). Synchronous by
+    // design: parking and resuming a conversation is never a decode step, so
+    // the contract copies with cudaMemcpyDefault and settles with
+    // cudaDeviceSynchronize, like the C++ it replaces. A shim without these
+    // slots cannot save or restore snapshots; the core asks before it tries.
+    /// `cudaMemcpy(dst, src, bytes, cudaMemcpyDefault)` — the engine holds one
+    /// address per region and the runtime resolves the direction. `err` carries
+    /// the raw `cudaErrorString`, which the caller prefixes per its contract.
+    pub memcpy_default: Option<
+        unsafe extern "C" fn(
+            dst: *mut c_void,
+            src: *const c_void,
+            bytes: u64,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub device_sync: Option<unsafe extern "C" fn(err: *mut c_char, err_len: usize) -> StrataStatus>,
 }
 
 impl StrataKernels {
@@ -383,6 +402,8 @@ impl StrataKernels {
             device_free: None,
             memcpy_h2d_async: None,
             memcpy_d2h_async: None,
+            memcpy_default: None,
+            device_sync: None,
         }
     }
 
@@ -416,6 +437,8 @@ impl StrataKernels {
             device_free,
             memcpy_h2d_async,
             memcpy_d2h_async,
+            memcpy_default,
+            device_sync,
         } = *self;
         [
             device_count.map(|f| f as usize),
@@ -446,6 +469,8 @@ impl StrataKernels {
             device_free.map(|f| f as usize),
             memcpy_h2d_async.map(|f| f as usize),
             memcpy_d2h_async.map(|f| f as usize),
+            memcpy_default.map(|f| f as usize),
+            device_sync.map(|f| f as usize),
         ]
         .iter()
         .filter(|s| s.is_some())
@@ -518,9 +543,10 @@ mod tests {
         // their offsets, and the four device-memory slots sit at the tail.
         assert_eq!(
             std::mem::size_of::<StrataKernels>(),
-            28 * std::mem::size_of::<usize>()
+            30 * std::mem::size_of::<usize>()
         );
         let none = StrataKernels::none();
         assert!(none.device_alloc.is_none() && none.memcpy_d2h_async.is_none());
+        assert!(none.memcpy_default.is_none() && none.device_sync.is_none());
     }
 }
