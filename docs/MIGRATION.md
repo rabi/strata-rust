@@ -456,3 +456,47 @@ ports. The other five files — `pinned`, `expert_source`, `layer`, `mtp`, `sess
 with a checked destination grid, a memset round trip, an event-timed stream, a
 gated second stream, an upload-then-replay that must move live bytes). It skips on
 a CPU shim build, so it needs one run on the GPU box.
+
+**Phase 2, module 5 — done: `expert_source.cpp`'s CPU-only policy ->
+`strata-core::expert_plan`.** 241 C++ lines, and unlike every module before it,
+zero CUDA calls are reachable from any of them — the header says the planner is
+"kept CPU-only so selection and byte accounting can be tested without initializing
+a GPU", so this port adds no ABI and no device work at all. What moved: the host-RAM
+gate (`host_available_memory`, `cgroup_available_bytes`), the cache-complement
+planner, the complement-or-mapped resolution, the adaptive-tier swap, and the
+resident keep decision.
+
+The gate is `tools/expert_plan_corpus.cpp`: it compiles the real
+`expert_source.cpp` on the host (CUDA symbols stubbed to abort-if-called, the
+kernel/platform symbols left unresolved because nothing under test reaches them),
+runs 56 observations over all five functions, and prints one line each. The fake
+`/proc` and cgroup tree it writes is embedded in the golden as hex, so
+`tests/expert_plan_corpus.rs` rebuilds it and replays every case. The two line
+streams are identical.
+
+What the corpus pins down that reading the code would have let me guess wrong:
+
+- `root / "/foo"` *replaces* the root — appending an absolute path to a path is an
+  assignment in `std::filesystem`. So a cgroup group only resolves when its path is
+  literally under the mount root, and the containment check that follows is a
+  **string** prefix test, not a component test. A process in a nested cgroup whose
+  path is not under `/sys/fs/cgroup` fails the whole read.
+- `memory.max` reading `max` skips the accounting for that group and carries on up;
+  the root group is allowed to have no `memory.max` at all, but only when
+  `cgroup.controllers` is there to prove it is a real cgroup root. Remove that file
+  and the same case returns false.
+- `>>` into a `uint64_t` accepts a leading `-` and wraps; `stoull` throws. Same
+  bytes, different verdicts, and the two paths sit three lines apart.
+- `/proc/meminfo` here takes the LAST well-formed line and skips malformed ones. The
+  `conversation_memory.cpp` parser ported in module 1 rejects duplicates and fails
+  closed. Two parsers, two files, two behaviours — both ported as they are, not
+  unified.
+- `mark_pairs` short-circuits: a primary-tier refusal means the additional tier is
+  never examined, so the duplicate-primary error wins over a duplicate in the other
+  list.
+
+`pinned`'s deterministic core (the read plan, the checksums, the cap and slice
+arithmetic — ~150 of its 725 lines) still folds in behind an `Arena` trait; that is
+the same module's second half and has not moved yet.
+
+96 workspace tests (95 before this module), 0 clippy warnings, fmt clean.

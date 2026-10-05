@@ -1,0 +1,114 @@
+CORPUS|CGROUP|invalid_stat|ok=0|bytes=0
+CORPUS|CGROUP|plain|ok=1|bytes=67645734912
+CORPUS|CGROUP|dirty_eats_reclaim|ok=1|bytes=53687091200
+CORPUS|CGROUP|writeback_eats_reclaim|ok=1|bytes=53687091200
+CORPUS|CGROUP|inactive_over_charged|ok=1|bytes=107374182400
+CORPUS|CGROUP|over_limit_after_reclaim|ok=1|bytes=0
+CORPUS|CGROUP|all_zero|ok=1|bytes=107374182400
+CORPUS|CGROUP|limit_zero|ok=1|bytes=0
+CORPUS|CGROUP|dirty_over_reclaim|ok=1|bytes=53687091200
+CORPUS|PLAN|no_pairs|ok=1|err=|bytes=900|count=6|sentinels=0|first=0,100,200,300,500,700,
+CORPUS|PLAN|primary_marks|ok=1|err=|bytes=800|count=6|sentinels=1|first=0,18446744073709551615,100,200,400,600,
+CORPUS|PLAN|additional_marks|ok=1|err=|bytes=700|count=6|sentinels=1|first=0,100,200,18446744073709551615,300,500,
+CORPUS|PLAN|both_tiers|ok=1|err=|bytes=600|count=6|sentinels=2|first=0,18446744073709551615,100,18446744073709551615,200,400,
+CORPUS|PLAN|overlap|ok=0|err=FileExpertSource: the primary and additional GPU expert tiers overlap|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|dup_primary|ok=0|err=FileExpertSource: duplicate primary GPU pair in the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|dup_additional|ok=0|err=FileExpertSource: duplicate additional GPU pair in the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|pair_outside|ok=0|err=FileExpertSource: primary GPU pair is outside the expert geometry|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|pair_negative|ok=0|err=FileExpertSource: primary GPU pair is outside the expert geometry|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|zero_blob|ok=0|err=FileExpertSource: cache complement layer has zero-sized expert blobs|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|bad_layers|ok=0|err=FileExpertSource: invalid geometry for the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|bad_expert|ok=0|err=FileExpertSource: invalid geometry for the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|size_mismatch|ok=0|err=FileExpertSource: invalid geometry for the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|huge_geometry|ok=0|err=FileExpertSource: invalid geometry for the cache complement plan|bytes=0|count=0|sentinels=0|first=
+CORPUS|PLAN|per_layer_sizes|ok=1|err=|bytes=51|count=6|sentinels=1|first=0,7,14,18446744073709551615,25,38,
+CORPUS|EXCHANGE|swap|ok=1|changed=1|1:18446744073709551615->100|2:100->18446744073709551615
+CORPUS|EXCHANGE|same_index|ok=0|changed=0
+CORPUS|EXCHANGE|in_not_in_copy|ok=0|changed=0
+CORPUS|EXCHANGE|out_already_in|ok=0|changed=0
+CORPUS|EXCHANGE|in_out_of_range|ok=0|changed=0
+CORPUS|EXCHANGE|out_of_range|ok=0|changed=0
+CORPUS|FALLBACK|in_complement|which=complement|off=100
+CORPUS|FALLBACK|sentinel_goes_mapped|which=mapped|off=0
+CORPUS|FALLBACK|no_complement_backing|which=mapped|off=0
+CORPUS|FALLBACK|index_past_end|which=mapped|off=0
+CORPUS|KEEP|all_fit|keep=0
+CORPUS|KEEP|base_over_budget|keep=-1
+CORPUS|KEEP|partial|keep=1
+CORPUS|KEEP|exact_fit|keep=0
+CORPUS|KEEP|lend_from_clamps|keep=3
+CORPUS|KEEP|lend_from_negative|keep=3
+CORPUS|KEEP|nothing_kept|keep=2
+CORPUS|KEEP|zero_budget|keep=1
+CORPUS|HOST|no_cgroup_line|ok=1|available=16777216|cgroup_limit=18446744073709551615
+CORPUS|HOST|no_memavailable|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|groups_file_missing|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_root_no_controllers|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_max|ok=1|available=16777216|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_limit|ok=1|available=7085|cgroup_limit=8000
+CORPUS|HOST|v2_tighter_than_meminfo|ok=1|available=1085|cgroup_limit=2000
+CORPUS|HOST|v2_unreadable_limit|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_missing_stat|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_duplicate_key|ok=0|available=0|cgroup_limit=18446744073709551615
+CORPUS|HOST|v2_ancestor_and_child|ok=1|available=6085|cgroup_limit=7000
+CORPUS|HOST|v1_memory_controller|ok=1|available=5000|cgroup_limit=6000
+CORPUS|HOST|v1_unlimited|ok=1|available=16777216|cgroup_limit=18446744073709551615
+
+CORPUS|FILE|groups_file_missing/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|no_cgroup_line/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|no_cgroup_line/groups|
+CORPUS|FILE|no_memavailable/cgroup_file|4d656d546f74616c3a203332373638206b420a
+CORPUS|FILE|no_memavailable/groups|303a3a2f0a
+CORPUS|FILE|v1_memory_controller/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v1_memory_controller/groups|343a6d656d6f72793a2f6261720a
+CORPUS|FILE|v1_memory_controller/memory/bar/memory.limit_in_bytes|363030300a
+CORPUS|FILE|v1_memory_controller/memory/bar/memory.usage_in_bytes|313030300a
+CORPUS|FILE|v1_unlimited/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v1_unlimited/groups|343a6d656d6f72793a2f6261720a
+CORPUS|FILE|v1_unlimited/memory/bar/memory.limit_in_bytes|393232333337323033363835343737313731320a
+CORPUS|FILE|v1_unlimited/memory/bar/memory.usage_in_bytes|313030300a
+CORPUS|FILE|v2_ancestor_and_child/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_ancestor_and_child/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_ancestor_and_child/foo/bar/memory.current|313030300a
+CORPUS|FILE|v2_ancestor_and_child/foo/bar/memory.max|373030300a
+CORPUS|FILE|v2_ancestor_and_child/foo/bar/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_ancestor_and_child/foo/memory.current|313030300a
+CORPUS|FILE|v2_ancestor_and_child/foo/memory.max|393030300a
+CORPUS|FILE|v2_ancestor_and_child/foo/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_ancestor_and_child/groups|303a3a2f666f6f2f6261720a
+CORPUS|FILE|v2_duplicate_key/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_duplicate_key/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_duplicate_key/foo/memory.current|313030300a
+CORPUS|FILE|v2_duplicate_key/foo/memory.max|383030300a
+CORPUS|FILE|v2_duplicate_key/foo/memory.stat|696e6163746976655f66696c65203130300a696e6163746976655f66696c65203230300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_duplicate_key/groups|303a3a2f666f6f0a
+CORPUS|FILE|v2_limit/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_limit/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_limit/foo/memory.current|313030300a
+CORPUS|FILE|v2_limit/foo/memory.max|383030300a
+CORPUS|FILE|v2_limit/foo/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_limit/groups|303a3a2f666f6f0a
+CORPUS|FILE|v2_max/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_max/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_max/foo/memory.current|313030300a
+CORPUS|FILE|v2_max/foo/memory.max|6d61780a
+CORPUS|FILE|v2_max/foo/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_max/groups|303a3a2f666f6f0a
+CORPUS|FILE|v2_missing_stat/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_missing_stat/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_missing_stat/foo/memory.current|313030300a
+CORPUS|FILE|v2_missing_stat/foo/memory.max|383030300a
+CORPUS|FILE|v2_missing_stat/groups|303a3a2f666f6f0a
+CORPUS|FILE|v2_root_no_controllers/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_root_no_controllers/groups|303a3a2f0a
+CORPUS|FILE|v2_tighter_than_meminfo/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_tighter_than_meminfo/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_tighter_than_meminfo/foo/memory.current|313030300a
+CORPUS|FILE|v2_tighter_than_meminfo/foo/memory.max|323030300a
+CORPUS|FILE|v2_tighter_than_meminfo/foo/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_tighter_than_meminfo/groups|303a3a2f666f6f0a
+CORPUS|FILE|v2_unreadable_limit/cgroup.controllers|6d656d6f72790a
+CORPUS|FILE|v2_unreadable_limit/cgroup_file|4d656d417661696c61626c653a203136333834206b420a
+CORPUS|FILE|v2_unreadable_limit/foo/memory.current|313030300a
+CORPUS|FILE|v2_unreadable_limit/foo/memory.stat|696e6163746976655f66696c65203130300a66696c655f64697274792031300a66696c655f77726974656261636b20350a
+CORPUS|FILE|v2_unreadable_limit/groups|303a3a2f666f6f0a
