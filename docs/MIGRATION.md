@@ -540,3 +540,36 @@ The `#ifdef _WIN32` branches (`sliced_pin_limit`, the unbuffered `ReadFile` path
 the DXGI budget) are compiled out here and are **not** covered by this golden.
 
 99 workspace tests (96 before this module), 0 clippy warnings, fmt clean.
+
+**Phase 2, module 6 — done: `layer.cpp`'s deterministic surface ->
+`strata-core::layer`.** The two gates (`sform_of`, `plane_ptrs`), the `Cursor`
+bump allocator, the four arena layouts (`gdn`, `moe`, `qsa`, `block`), the KV
+streaming plan (`kv_plan`, `kv_pool_bytes`, `qsa_state_bytes`) and the dump
+stride. `tools/layer_corpus.cpp` `#include`s `layer.cpp` rather than linking it —
+the gates and the plan are in anonymous namespaces and would otherwise be
+unreachable — and the golden is 125 lines of its output.
+
+Four size helpers live in `.cu` files (`shared_expert_scratch_bytes`,
+`qsa_decode_attn_scratch_floats`, `kv_block_bytes`, `gr_workspace_init`). The
+corpus builds without nvcc, so those four are transcribed on both sides and a
+misread of one of them would show up here as a match, not a mismatch. Everything
+else is the real code.
+
+What the corpus pins:
+
+- `qsa_buffers_bytes` sums its parts RAW and aligns only the total;
+  `qsa_buffers_init` runs a `Cursor`, which aligns every part. On the real
+  geometry they are 5,202,512 and 5,202,240 — 272 B apart. `block` is 288 B apart.
+  The bytes function is the allocation size, so it has to stay the larger of the
+  two; unifying the two paths into one table would change what gets allocated.
+- `kv_plan` returns early on `ring_cells < 0` (always fully resident), so mode 1
+  needs `ring_cells == 0` exactly — negative is not "no ring", it is a different
+  answer. And `qsa_kv_resident_min()` is 20480, so `STRATA_KV_RESIDENT=100`
+  behaves exactly like 20480: the floor wins and the plan does not change.
+- `plane_ptrs` refuses `codes_bytes == 0` even when the three planes sum to the
+  tensor exactly. A tensor with no code plane is a refusal, not a degenerate case.
+- The hybrid `kv_pool_bytes` scale term is `rows * (head_dim / 64) * 2` — one
+  `* 2` — while `kv_q8_bytes_per_cell`, three lines away, uses `* 2 * 2`. Two
+  lines that look like they should agree and do not.
+
+100 workspace tests (99 before this module), 0 clippy warnings, fmt clean.

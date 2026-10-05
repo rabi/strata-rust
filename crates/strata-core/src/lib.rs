@@ -12,6 +12,7 @@ pub mod conversation_state;
 pub mod coupled_draft;
 pub mod expert_plan;
 pub mod host_memory;
+pub mod layer;
 pub mod layout;
 pub mod native_dense;
 pub mod native_mm;
