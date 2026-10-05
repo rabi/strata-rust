@@ -113,9 +113,10 @@ Evidence for the boundary being drawable where I draw it:
 (`device_alloc`/`device_free`/`memcpy_h2d_async`/`memcpy_d2h_async`) were appended
 within ABI v1 — legal because the caller pre-zeroes `out` (`StrataKernels::none()`),
 so an old shim whose `memset` covers only its own smaller `sizeof` cannot leave
-garbage in the new tail. `abi.rs` pins the vtable at 28 slots; the header says
+garbage in the new tail. `abi.rs` pins the vtable at 30 slots (the
+snapshot seam added `memcpy_default` and `device_sync`); the header says
 the same with a `static_assert`. The claim is tested, not asserted: a 24-slot
-shim (its `sizeof` = 192, its own header copy) loaded by the 28-slot Rust core
+shim (its `sizeof` = 192, its own header copy) loaded by the 30-slot Rust core
 still drives the probe end-to-end and produces the identical whole-model hash
 (`3b7b3afb6fe0711d`) as the current shim — bytes crossed the boundary through a
 struct 32 bytes smaller than the core's own.
@@ -153,7 +154,7 @@ is ported, append-only.
 **The ABI has a live implementation and a consumer.** `shim/strata_shim.cpp`
 implements the header for real: CPU build links the engine's own
 `src/platform/direct_file.cpp` (O_DIRECT worker-thread reader, unmodified) and
-`posix_memalign` pinned memory, filling 8 of 28 slots; `STRATA_SHIM_CUDA=1`
+`posix_memalign` pinned memory, filling 8 of 30 slots; `STRATA_SHIM_CUDA=1`
 adds device/stream/graph slots. `crates/strata-device/src/shim.rs` is the Rust
 `dlopen`/`dlsym` loader (the one `#![allow(unsafe_code)]` module in the tree),
 and `crates/strata-probe` is a binary that drives it. The handshake itself was
@@ -297,6 +298,30 @@ address each layer's OWN buffer at offset 0 while the checkpoint's vector is the
 concatenated one, and libstdc++ copy-construction allocates exactly `size`, which is
 a different capacity from growing to it — and `bytes()` counts capacity, so the
 difference is a real admission number. 75 workspace tests, 0 clippy, fmt clean.
+
+Module 3's device half then got a real implementation: `strata-device::snapshot::
+SnapshotDevice` resolves `(layer, pool-set, region)` to an address once and moves
+every byte through two new append-only slots, `memcpy_default` and `device_sync`
+(28 -> 30). The core never sees an address; the seam never sees a format branch.
+It refuses what it cannot serve at construction — a streamed or ring layer needs
+`kv_stream_reset`/`kv_ring_restore`, which have no slots yet, so its image could
+never be verified readable — and it range-checks every transfer before the DMA.
+
+The seam is gated twice. On the dev box, `tests/snapshot_device.rs` injects a fake
+vtable over host memory so every branch of the seam runs without a GPU: the save
+moves the golden's 10,440 bytes and reproduces its fingerprints (K
+`6404351448661373315`, pooled `9014609365494796707`, gdn `7415105493412125315`);
+the restore replays the golden's 17-copy sequence with the same sizes in the same
+order (10,504 bytes - the 64-byte difference is the two moving pooled rows a
+restore rebuilds and a save never reads); the first copy of a save is the gdn row,
+so a failure there reports the running-state prefix, exactly as the golden's
+`SAVE_INCREMENTAL|copy_failure_ok=0` line does. On `giant18`,
+`tests/gpu_snapshot.rs` runs the same fixture over real `cudaMalloc`,
+`cudaMemcpy(..., cudaMemcpyDefault)` and `cudaDeviceSynchronize`: save reads the
+golden bytes over real DMA, the buffers are overwritten with a different pattern,
+restore puts the originals back in VRAM. Measured: 2/2 pass in 0.26 s on the L4
+with a 25-of-30-slot CUDA shim, and the 6 earlier ABI tests still pass in 1.13 s.
+82 workspace tests, 0 clippy, fmt clean.
 
 **Phase 3 — `generate.cpp` last.** It is 6,913 lines, it is the integration
 point (CLI, pipe protocol, prefill orchestration, image handling), and it is the
