@@ -606,3 +606,348 @@ impl Drop for ReplayableGraph<'_> {
         }
     }
 }
+
+// ---- appended slots: the pinned arena, the pager, layer, mtp, session --------
+//
+// Thin safe wrappers, one per vtable slot. A missing slot is an error rather than
+// a panic, so a shim build without CUDA degrades the way the C++ build without
+// CUDA does: the caller asks, gets told, and falls back.
+
+impl Shim {
+    pub fn get_device(&self) -> Result<i32, String> {
+        let f = self.kernels.get_device.ok_or("no get_device slot")?;
+        let mut out = 0 as c_int;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: out and err are live and correctly sized for the callee.
+        let st = unsafe { f(&mut out, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(out)
+    }
+
+    /// `(free, total)` as the runtime reports them.
+    pub fn mem_get_info(&self) -> Result<(u64, u64), String> {
+        let f = self.kernels.mem_get_info.ok_or("no mem_get_info slot")?;
+        let mut free = 0u64;
+        let mut total = 0u64;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: both out-pointers and err are live.
+        let st = unsafe { f(&mut free, &mut total, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok((free, total))
+    }
+
+    /// cudaGetLastError: reports the sticky error AND CLEARS it. `None` when this
+    /// shim build has no such slot, so the caller cannot tell a clean runtime from
+    /// a shim that cannot ask.
+    pub fn take_last_error(&self) -> Option<Option<String>> {
+        let f = self.kernels.get_last_error?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: err is a live out buffer of the size passed.
+        let st = unsafe { f(err.as_mut_ptr(), err.len()) };
+        Some(if st.is_ok() { None } else { Some(cstr(&err)) })
+    }
+
+    /// cudaPeekAtLastError: reports WITHOUT clearing. The two are not
+    /// interchangeable and the engine uses both, which is why both are slots.
+    pub fn peek_last_error(&self) -> Option<Option<String>> {
+        let f = self.kernels.peek_last_error?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: err is a live out buffer of the size passed.
+        let st = unsafe { f(err.as_mut_ptr(), err.len()) };
+        Some(if st.is_ok() { None } else { Some(cstr(&err)) })
+    }
+
+    /// cudaHostRegister over memory this process already owns (the arena the C++
+    /// mmaps under STRATA_ARENA_MMAP). `flags` is the runtime's flag word.
+    pub fn host_register(&self, host: &mut [u8], flags: u32) -> Result<(), String> {
+        let f = self.kernels.host_register.ok_or("no host_register slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: host is live for the call and `host.len()` is its real length.
+        let st = unsafe {
+            f(
+                host.as_mut_ptr() as *mut c_void,
+                host.len() as u64,
+                flags,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    pub fn host_unregister(&self, host: &mut [u8]) -> Result<(), String> {
+        let f = self
+            .kernels
+            .host_unregister
+            .ok_or("no host_unregister slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: this slice covers exactly the registration being undone.
+        let st = unsafe {
+            f(
+                host.as_mut_ptr() as *mut c_void,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    /// cudaHostGetDevicePointer: the device address that aliases a registration.
+    /// The pointer is only valid while the registration is alive, so the caller
+    /// keeps the slice, not just the pointer.
+    pub fn host_device_pointer(&self, host: &mut [u8]) -> Result<*mut c_void, String> {
+        let f = self
+            .kernels
+            .host_get_device_pointer
+            .ok_or("no host_get_device_pointer slot")?;
+        let mut out = std::ptr::null_mut();
+        let mut err = [0 as c_char; 256];
+        // SAFETY: out and err are live; host stays alive for the call.
+        let st = unsafe {
+            f(
+                host.as_mut_ptr() as *mut c_void,
+                &mut out,
+                0,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(out)
+    }
+}
+
+impl DeviceBuf<'_> {
+    /// cudaMemset — synchronous, value is the byte written.
+    pub fn memset(&self, value: u8) -> Result<(), String> {
+        let f = self.k.memset_dev.ok_or("no memset_dev slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: p is live device memory of self.bytes.
+        let st = unsafe {
+            f(
+                self.p,
+                c_int::from(value),
+                self.bytes as u64,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    pub fn memset_async(&self, value: u8, stream: &Stream) -> Result<(), String> {
+        let f = self.k.memset_async.ok_or("no memset_async slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: p is live device memory of self.bytes; the stream is live.
+        let st = unsafe {
+            f(
+                self.p,
+                c_int::from(value),
+                self.bytes as u64,
+                stream.raw(),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    /// cudaMemcpy2DAsync, host->device: `src` covers `height` rows of `spitch`
+    /// bytes with `width` useful in each, landing on `self` at its own pitch.
+    pub fn copy_h2d_2d(
+        &self,
+        src: &[u8],
+        spitch: u64,
+        width: u64,
+        height: u64,
+        dpitch: u64,
+        stream: &Stream,
+    ) -> Result<(), String> {
+        let f = self.k.memcpy2d_async.ok_or("no memcpy2d_async slot")?;
+        if width * height > spitch * height || width * height > dpitch * height {
+            return Err(format!(
+                "2d copy {width}x{height} does not fit pitches {spitch}/{dpitch}"
+            ));
+        }
+        let need = spitch * height;
+        if need > src.len() as u64 || dpitch * height > self.bytes as u64 {
+            return Err(format!(
+                "2d copy needs {need} source bytes in {} and {} destination bytes in {}",
+                src.len(),
+                dpitch * height,
+                self.bytes
+            ));
+        }
+        let mut err = [0 as c_char; 256];
+        // SAFETY: both regions cover the copy (checked above); src stays alive
+        // because the caller drains the stream before this borrow ends.
+        let st = unsafe {
+            f(
+                self.p,
+                dpitch,
+                src.as_ptr() as *const c_void,
+                spitch,
+                width,
+                height,
+                1, // cudaMemcpyHostToDevice
+                stream.raw(),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+}
+
+impl Stream<'_> {
+    /// cudaStreamCreateWithFlags. `create(..)` is the flags-0 case.
+    pub fn create_with_flags(k: &StrataKernels, flags: u32) -> Result<Stream<'_>, String> {
+        let f = k
+            .stream_create_with_flags
+            .ok_or("no stream_create_with_flags slot")?;
+        let mut s = std::ptr::null_mut();
+        let mut err = [0 as c_char; 256];
+        // SAFETY: s is a live out-pointer written on success only.
+        let st = unsafe { f(&mut s, flags, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(Stream { k, s })
+    }
+
+    /// cudaStreamSynchronize — blocks this thread until the stream drains.
+    pub fn sync(&self) -> Result<(), String> {
+        let f = self.k.stream_sync.ok_or("no stream_sync slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: this stream is live (Drop has not run).
+        let st = unsafe { f(self.s, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    pub fn wait_event(&self, event: &Event) -> Result<(), String> {
+        let f = self
+            .k
+            .stream_wait_event
+            .ok_or("no stream_wait_event slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: both handles are live and from this shim.
+        let st = unsafe { f(self.s, event.e, 0, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+}
+
+/// A CUDA event. Dropping it destroys it, so nothing may still be recorded on it.
+pub struct Event<'a> {
+    k: &'a StrataKernels,
+    e: crate::abi::Event,
+}
+
+impl<'a> Event<'a> {
+    /// cudaEventCreateWithFlags; flags 0 is cudaEventCreate.
+    pub fn create(k: &'a StrataKernels, flags: u32) -> Result<Event<'a>, String> {
+        let f = k.event_create.ok_or("no event_create slot")?;
+        let mut e = std::ptr::null_mut();
+        let mut err = [0 as c_char; 256];
+        // SAFETY: e is a live out-pointer written on success only.
+        let st = unsafe { f(&mut e, flags, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(Event { k, e })
+    }
+
+    pub fn record(&self, stream: &Stream) -> Result<(), String> {
+        let f = self.k.event_record.ok_or("no event_record slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: both handles are live and from this shim.
+        let st = unsafe { f(self.e, stream.raw(), err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    pub fn sync(&self) -> Result<(), String> {
+        let f = self.k.event_sync.ok_or("no event_sync slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: this event is live.
+        let st = unsafe { f(self.e, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+
+    /// Non-blocking poll, same 1 = done convention as `Stream::query_done`.
+    pub fn query_done(&self) -> bool {
+        match self.k.event_query_done {
+            Some(f) => (unsafe { f(self.e) }) != 0,
+            None => false,
+        }
+    }
+
+    /// cudaEventElapsedTime between two recorded events, in milliseconds.
+    pub fn elapsed_ms(&self, other: &Event) -> Result<f32, String> {
+        let f = self.k.event_elapsed_ms.ok_or("no event_elapsed_ms slot")?;
+        let mut ms = 0f32;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: out is live and both events are live handles from this shim.
+        let st = unsafe { f(&mut ms, self.e, other.e, err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(ms)
+    }
+}
+
+impl Drop for Event<'_> {
+    fn drop(&mut self) {
+        if let Some(f) = self.k.event_destroy {
+            // SAFETY: exactly one destroy for this handle, after the caller has
+            // stopped recording on it.
+            unsafe { f(self.e) };
+        }
+    }
+}
+
+impl ReplayableGraph<'_> {
+    /// cudaGraphUpload on the instantiated exec: pay the upload cost before the
+    /// first replay instead of inside it.
+    pub fn upload(&self, stream: &Stream) -> Result<(), String> {
+        let f = self.k.graph_upload.ok_or("no graph_upload slot")?;
+        let mut err = [0 as c_char; 256];
+        // SAFETY: g came from a successful capture+end; stream is live.
+        let st = unsafe { f(self.g, stream.raw(), err.as_mut_ptr(), err.len()) };
+        if !st.is_ok() {
+            return Err(cstr(&err));
+        }
+        Ok(())
+    }
+}

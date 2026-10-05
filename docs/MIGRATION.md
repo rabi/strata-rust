@@ -427,3 +427,32 @@ earlier call left there. The Rust returns `Result` instead; the harness models t
 clearing where the C++ did it, and the golden line records the behaviour.
 
 84 workspace tests, 0 clippy warnings, fmt clean.
+
+**The vtable grew from 30 slots to 50 in one append, before the modules that need
+it.** The remaining Phase-2 files use 45 distinct CUDA functions between them; 16
+were already covered, so 20 went in (`get_device`, `get_last_error`,
+`peek_last_error`, `mem_get_info`, `host_register`/`unregister`/`get_device_pointer`,
+`memset`/`memset_async`/`memcpy2d_async`, `stream_create_with_flags`/`stream_sync`/
+`stream_wait_event`, `event_create`/`destroy`/`record`/`sync`/`query_done`/
+`elapsed_ms`, `graph_upload`). Each signature was taken from a real call site, not
+from the CUDA docs — `graph_upload` uploads the instantiated exec because that is
+what `mtp.cpp` passes, and `event_create(out, 0, ..)` is `cudaEventCreate` so the
+flags-0 and flags-N callers share one slot.
+
+`cudaGetLastError` and `cudaPeekAtLastError` are both slots because they are not
+interchangeable and the engine uses both — one clears the sticky error, one does
+not, and `tests/gpu_slots.rs` tests exactly that difference.
+
+Four functions the remaining modules use are deliberately **not** slots:
+`cudaGraphGetNodes`, `cudaGraphNodeGetType`, `cudaGraphKernelNodeGetParams`,
+`cudaLaunchHostFunc` (all `verify.cpp` only) and `cudaGetDriverEntryPoint[ByVersion]`
+(`expert_cache.cpp` only). Those are the shape problem: "inspect a captured graph
+node" and "load a driver symbol by name" cannot go behind an opaque handle without
+mirroring the API they wrap, which is the decision `verify.cpp` needs before it
+ports. The other five files — `pinned`, `expert_source`, `layer`, `mtp`, `session`
+— are covered by the 50 slots as they stand.
+
+`tests/gpu_slots.rs` exercises every new slot on real hardware (one pitched 2D copy
+with a checked destination grid, a memset round trip, an event-timed stream, a
+gated second stream, an upload-then-replay that must move live bytes). It skips on
+a CPU shim build, so it needs one run on the GPU box.

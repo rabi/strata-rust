@@ -155,6 +155,7 @@ pub type Stream = *mut c_void;
 pub type DeviceFile = *mut c_void;
 pub type CapturedGraphHandle = *mut c_void;
 pub type SessionHandle = *mut c_void;
+pub type Event = *mut c_void;
 
 /// The two coupled-draft calls carry too many device buffers for a readable inline
 /// signature.
@@ -366,6 +367,145 @@ pub struct StrataKernels {
         ) -> StrataStatus,
     >,
     pub device_sync: Option<unsafe extern "C" fn(err: *mut c_char, err_len: usize) -> StrataStatus>,
+
+    // ---- appended for the pinned arena and the pager/layer/session modules.
+    // Same append-only contract: a shim that predates them leaves them null and
+    // the core falls back. Each one forwards to the runtime call of the same name
+    // and puts the runtime's own error text in `err`, so the core can print what
+    // the C++ printed. `event_create(out, 0, ..)` is cudaEventCreate and
+    // `stream_create_with_flags(out, 0, ..)` is cudaStreamCreate; `graph_upload`
+    // uploads the instantiated exec, which is what the engine passes.
+    pub get_device: Option<
+        unsafe extern "C" fn(out: *mut c_int, err: *mut c_char, err_len: usize) -> StrataStatus,
+    >,
+    /// cudaGetLastError CLEARS; cudaPeekAtLastError does not. Both are slots
+    /// because the engine uses both and they are not interchangeable.
+    pub get_last_error:
+        Option<unsafe extern "C" fn(err: *mut c_char, err_len: usize) -> StrataStatus>,
+    pub peek_last_error:
+        Option<unsafe extern "C" fn(err: *mut c_char, err_len: usize) -> StrataStatus>,
+    pub mem_get_info: Option<
+        unsafe extern "C" fn(
+            free_bytes: *mut u64,
+            total_bytes: *mut u64,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub host_register: Option<
+        unsafe extern "C" fn(
+            host: *mut c_void,
+            bytes: u64,
+            flags: u32,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub host_unregister: Option<
+        unsafe extern "C" fn(host: *mut c_void, err: *mut c_char, err_len: usize) -> StrataStatus,
+    >,
+    pub host_get_device_pointer: Option<
+        unsafe extern "C" fn(
+            host: *mut c_void,
+            out: *mut *mut c_void,
+            flags: u32,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub memset_dev: Option<
+        unsafe extern "C" fn(
+            dst_dev: *mut c_void,
+            value: c_int,
+            bytes: u64,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub memset_async: Option<
+        unsafe extern "C" fn(
+            dst_dev: *mut c_void,
+            value: c_int,
+            bytes: u64,
+            stream: Stream,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    /// `kind` is cudaMemcpyKind: 0 unknown, 1 H2D, 2 D2H, 3 D2D
+    pub memcpy2d_async: Option<
+        unsafe extern "C" fn(
+            dst_dev: *mut c_void,
+            dpitch: u64,
+            src_host: *const c_void,
+            spitch: u64,
+            width: u64,
+            height: u64,
+            kind: c_int,
+            stream: Stream,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub stream_create_with_flags: Option<
+        unsafe extern "C" fn(
+            out: *mut Stream,
+            flags: u32,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub stream_sync: Option<
+        unsafe extern "C" fn(stream: Stream, err: *mut c_char, err_len: usize) -> StrataStatus,
+    >,
+    pub stream_wait_event: Option<
+        unsafe extern "C" fn(
+            stream: Stream,
+            event: Event,
+            flags: u32,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub event_create: Option<
+        unsafe extern "C" fn(
+            out: *mut Event,
+            flags: u32,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub event_destroy: Option<unsafe extern "C" fn(event: Event)>,
+    pub event_record: Option<
+        unsafe extern "C" fn(
+            event: Event,
+            stream: Stream,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub event_sync: Option<
+        unsafe extern "C" fn(event: Event, err: *mut c_char, err_len: usize) -> StrataStatus,
+    >,
+    /// 1 = done, matching `stream_query_done` rather than the runtime's 0
+    pub event_query_done: Option<unsafe extern "C" fn(event: Event) -> c_int>,
+    pub event_elapsed_ms: Option<
+        unsafe extern "C" fn(
+            out_ms: *mut f32,
+            start: Event,
+            end: Event,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
+    pub graph_upload: Option<
+        unsafe extern "C" fn(
+            graph: CapturedGraphHandle,
+            stream: Stream,
+            err: *mut c_char,
+            err_len: usize,
+        ) -> StrataStatus,
+    >,
 }
 
 impl StrataKernels {
@@ -404,6 +544,26 @@ impl StrataKernels {
             memcpy_d2h_async: None,
             memcpy_default: None,
             device_sync: None,
+            get_device: None,
+            get_last_error: None,
+            peek_last_error: None,
+            mem_get_info: None,
+            host_register: None,
+            host_unregister: None,
+            host_get_device_pointer: None,
+            memset_dev: None,
+            memset_async: None,
+            memcpy2d_async: None,
+            stream_create_with_flags: None,
+            stream_sync: None,
+            stream_wait_event: None,
+            event_create: None,
+            event_destroy: None,
+            event_record: None,
+            event_sync: None,
+            event_query_done: None,
+            event_elapsed_ms: None,
+            graph_upload: None,
         }
     }
 
@@ -439,6 +599,26 @@ impl StrataKernels {
             memcpy_d2h_async,
             memcpy_default,
             device_sync,
+            get_device,
+            get_last_error,
+            peek_last_error,
+            mem_get_info,
+            host_register,
+            host_unregister,
+            host_get_device_pointer,
+            memset_dev,
+            memset_async,
+            memcpy2d_async,
+            stream_create_with_flags,
+            stream_sync,
+            stream_wait_event,
+            event_create,
+            event_destroy,
+            event_record,
+            event_sync,
+            event_query_done,
+            event_elapsed_ms,
+            graph_upload,
         } = *self;
         [
             device_count.map(|f| f as usize),
@@ -471,6 +651,26 @@ impl StrataKernels {
             memcpy_d2h_async.map(|f| f as usize),
             memcpy_default.map(|f| f as usize),
             device_sync.map(|f| f as usize),
+            get_device.map(|f| f as usize),
+            get_last_error.map(|f| f as usize),
+            peek_last_error.map(|f| f as usize),
+            mem_get_info.map(|f| f as usize),
+            host_register.map(|f| f as usize),
+            host_unregister.map(|f| f as usize),
+            host_get_device_pointer.map(|f| f as usize),
+            memset_dev.map(|f| f as usize),
+            memset_async.map(|f| f as usize),
+            memcpy2d_async.map(|f| f as usize),
+            stream_create_with_flags.map(|f| f as usize),
+            stream_sync.map(|f| f as usize),
+            stream_wait_event.map(|f| f as usize),
+            event_create.map(|f| f as usize),
+            event_destroy.map(|f| f as usize),
+            event_record.map(|f| f as usize),
+            event_sync.map(|f| f as usize),
+            event_query_done.map(|f| f as usize),
+            event_elapsed_ms.map(|f| f as usize),
+            graph_upload.map(|f| f as usize),
         ]
         .iter()
         .filter(|s| s.is_some())
@@ -540,13 +740,14 @@ mod tests {
     #[test]
     fn appended_device_slots_keep_the_prefix_layout() {
         // Append-only is the whole versioning story: the first 24 slots keep
-        // their offsets, and the four device-memory slots sit at the tail.
+        // their offsets, and every later revision sits at the tail.
         assert_eq!(
             std::mem::size_of::<StrataKernels>(),
-            30 * std::mem::size_of::<usize>()
+            50 * std::mem::size_of::<usize>()
         );
         let none = StrataKernels::none();
         assert!(none.device_alloc.is_none() && none.memcpy_d2h_async.is_none());
         assert!(none.memcpy_default.is_none() && none.device_sync.is_none());
+        assert!(none.host_register.is_none() && none.event_elapsed_ms.is_none());
     }
 }

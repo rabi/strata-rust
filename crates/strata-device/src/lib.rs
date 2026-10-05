@@ -26,7 +26,9 @@ pub mod shim;
 pub mod snapshot;
 
 pub use abi::*;
-pub use shim::{CapturedGraph, DeviceBuf, DeviceFile, Pinned, ReplayableGraph, Shim, Stream};
+pub use shim::{
+    CapturedGraph, DeviceBuf, DeviceFile, Event, Pinned, ReplayableGraph, Shim, Stream,
+};
 pub use snapshot::{
     DeviceRegion, IndexerBuffers, LayerKv, LayerState, Residency, RunningTarget, SessionDevice,
     SnapshotDevice,

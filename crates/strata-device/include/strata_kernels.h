@@ -69,6 +69,7 @@ typedef struct IoCompletion {
 typedef void* StrataStream;
 typedef void* StrataDeviceFile;
 typedef void* StrataGraph;
+typedef void* StrataEvent;   /* an opaque cudaEvent_t, same shape as the others */
 
 typedef StrataStatus (*StrataCoupledStage)(const SamplerParams* mapped_params,
                                           const int32_t* mapped_hist,
@@ -160,6 +161,48 @@ typedef struct StrataKernels {
     StrataStatus (*memcpy_default)(void* dst, const void* src, uint64_t bytes,
                                    char* err, size_t err_len);
     StrataStatus (*device_sync)(char* err, size_t err_len);
+
+    /* ---- appended for the pinned arena and the pager/layer/session modules.
+     * Same append-only contract: a shim that predates them leaves them NULL and
+     * the core falls back. Every one of these is a direct forward to the runtime
+     * call of the same name, with the error text in `err` so the core can print
+     * what the C++ printed. `event_create(out, 0, ..)` is cudaEventCreate;
+     * `stream_create_with_flags(out, 0, ..)` is cudaStreamCreate; `graph_upload`
+     * uploads the instantiated exec, which is what the engine passes. ---- */
+    StrataStatus (*get_device)(int32_t* out, char* err, size_t err_len);
+    /* cudaGetLastError CLEARS; cudaPeekAtLastError does not. Both are slots
+     * because the engine uses both and they are not interchangeable. */
+    StrataStatus (*get_last_error)(char* err, size_t err_len);
+    StrataStatus (*peek_last_error)(char* err, size_t err_len);
+    StrataStatus (*mem_get_info)(uint64_t* free_bytes, uint64_t* total_bytes,
+                                 char* err, size_t err_len);
+    StrataStatus (*host_register)(void* host, uint64_t bytes, uint32_t flags,
+                                  char* err, size_t err_len);
+    StrataStatus (*host_unregister)(void* host, char* err, size_t err_len);
+    StrataStatus (*host_get_device_pointer)(void* host, void** out, uint32_t flags,
+                                            char* err, size_t err_len);
+    StrataStatus (*memset_dev)(void* dst_dev, int32_t value, uint64_t bytes,
+                               char* err, size_t err_len);
+    StrataStatus (*memset_async)(void* dst_dev, int32_t value, uint64_t bytes,
+                                 StrataStream stream, char* err, size_t err_len);
+    /* kind is cudaMemcpyKind: 0 unknown, 1 H2D, 2 D2H, 3 D2D */
+    StrataStatus (*memcpy2d_async)(void* dst_dev, uint64_t dpitch, const void* src_host,
+                                   uint64_t spitch, uint64_t width, uint64_t height,
+                                   int32_t kind, StrataStream stream, char* err, size_t err_len);
+    StrataStatus (*stream_create_with_flags)(StrataStream* out, uint32_t flags,
+                                             char* err, size_t err_len);
+    StrataStatus (*stream_sync)(StrataStream stream, char* err, size_t err_len);
+    StrataStatus (*stream_wait_event)(StrataStream stream, StrataEvent event, uint32_t flags,
+                                      char* err, size_t err_len);
+    StrataStatus (*event_create)(StrataEvent* out, uint32_t flags, char* err, size_t err_len);
+    void (*event_destroy)(StrataEvent event);
+    StrataStatus (*event_record)(StrataEvent event, StrataStream stream, char* err, size_t err_len);
+    StrataStatus (*event_sync)(StrataEvent event, char* err, size_t err_len);
+    /* 1 = done, matching stream_query_done rather than the runtime's 0 */
+    int32_t (*event_query_done)(StrataEvent event);
+    StrataStatus (*event_elapsed_ms)(float* out_ms, StrataEvent start, StrataEvent end,
+                                     char* err, size_t err_len);
+    StrataStatus (*graph_upload)(StrataGraph graph, StrataStream stream, char* err, size_t err_len);
 } StrataKernels;
 
 /* The shim's single entry point: fills `*out` with the vtable for this build
@@ -197,5 +240,5 @@ STRATA_STATIC_ASSERT(offsetof(DeviceInfo, total_bytes) == 24 && offsetof(DeviceI
                "DeviceInfo field order must match the Rust DeviceInfo");
 STRATA_STATIC_ASSERT(sizeof(IoCompletion) == 16, "IoCompletion must stay 16 bytes");
 STRATA_STATIC_ASSERT(offsetof(IoCompletion, bytes) == 8 && offsetof(IoCompletion, ok) == 12, "IoCompletion field order");
-STRATA_STATIC_ASSERT(sizeof(StrataKernels) == 30 * sizeof(void *), "StrataKernels is 30 vtable slots");
+STRATA_STATIC_ASSERT(sizeof(StrataKernels) == 50 * sizeof(void *), "StrataKernels is 50 vtable slots");
 #endif /* STRATA_KERNELS_H */

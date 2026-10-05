@@ -327,6 +327,222 @@ StrataStatus abi_device_sync(char* err, size_t err_len) {
     }
     return STRATA_OK;
 }
+
+/* ---- appended slots: pinned arena, pager, layer, session. Each forwards to the
+ * runtime call of the same name and puts the runtime's own text in `err`, so the
+ * Rust core prints exactly what the C++ printed. ---- */
+
+StrataStatus abi_get_device(int32_t* out, char* err, size_t err_len) {
+    if (out == nullptr) {
+        set_err(err, err_len, "get_device: null out");
+        return STRATA_ERROR;
+    }
+    int d = 0;
+    const cudaError_t e = cudaGetDevice(&d);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    *out = (int32_t) d;
+    return STRATA_OK;
+}
+
+/* cudaGetLastError CLEARS the sticky error; cudaPeekAtLastError does not. The
+ * engine uses both and they are not interchangeable, so both are slots. */
+StrataStatus abi_get_last_error(char* err, size_t err_len) {
+    const cudaError_t e = cudaGetLastError();
+    set_err(err, err_len, cudaGetErrorString(e));
+    return e == cudaSuccess ? STRATA_OK : STRATA_ERROR;
+}
+
+StrataStatus abi_peek_last_error(char* err, size_t err_len) {
+    const cudaError_t e = cudaPeekAtLastError();
+    set_err(err, err_len, cudaGetErrorString(e));
+    return e == cudaSuccess ? STRATA_OK : STRATA_ERROR;
+}
+
+StrataStatus abi_mem_get_info(uint64_t* free_bytes, uint64_t* total_bytes, char* err, size_t err_len) {
+    size_t f = 0, t = 0;
+    const cudaError_t e = cudaMemGetInfo(&f, &t);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    if (free_bytes != nullptr) *free_bytes = f;
+    if (total_bytes != nullptr) *total_bytes = t;
+    return STRATA_OK;
+}
+
+StrataStatus abi_host_register(void* host, uint64_t bytes, uint32_t flags, char* err, size_t err_len) {
+    const cudaError_t e = cudaHostRegister(host, (size_t) bytes, flags);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_host_unregister(void* host, char* err, size_t err_len) {
+    const cudaError_t e = cudaHostUnregister(host);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_host_get_device_pointer(void* host, void** out, uint32_t flags,
+                                         char* err, size_t err_len) {
+    if (out == nullptr) {
+        set_err(err, err_len, "host_get_device_pointer: null out");
+        return STRATA_ERROR;
+    }
+    void* p = nullptr;
+    const cudaError_t e = cudaHostGetDevicePointer(&p, host, flags);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    *out = p;
+    return STRATA_OK;
+}
+
+StrataStatus abi_memset_dev(void* dst_dev, int32_t value, uint64_t bytes, char* err, size_t err_len) {
+    if (bytes == 0) return STRATA_OK;
+    const cudaError_t e = cudaMemset(dst_dev, value, (size_t) bytes);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_memset_async(void* dst_dev, int32_t value, uint64_t bytes, StrataStream stream,
+                              char* err, size_t err_len) {
+    if (bytes == 0) return STRATA_OK;
+    const cudaError_t e =
+        cudaMemsetAsync(dst_dev, value, (size_t) bytes, (cudaStream_t) stream);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_memcpy2d_async(void* dst_dev, uint64_t dpitch, const void* src_host, uint64_t spitch,
+                                uint64_t width, uint64_t height, int32_t kind, StrataStream stream,
+                                char* err, size_t err_len) {
+    const cudaError_t e = cudaMemcpy2DAsync(dst_dev, (size_t) dpitch, src_host, (size_t) spitch,
+                                            (size_t) width, (size_t) height, (cudaMemcpyKind) kind,
+                                            (cudaStream_t) stream);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_stream_create_with_flags(StrataStream* out, uint32_t flags, char* err, size_t err_len) {
+    if (out == nullptr) {
+        set_err(err, err_len, "stream_create_with_flags: null out");
+        return STRATA_ERROR;
+    }
+    const cudaError_t e = cudaStreamCreateWithFlags((cudaStream_t*) out, flags);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_stream_sync(StrataStream stream, char* err, size_t err_len) {
+    const cudaError_t e = cudaStreamSynchronize((cudaStream_t) stream);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_stream_wait_event(StrataStream stream, StrataEvent event, uint32_t flags,
+                                   char* err, size_t err_len) {
+    const cudaError_t e = cudaStreamWaitEvent((cudaStream_t) stream, (cudaEvent_t) event, flags);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+/* flags 0 is cudaEventCreate; the engine only ever passes 0 today, and the flag
+ * is carried so a `cudaEventCreateWithFlags` caller does not need its own slot. */
+StrataStatus abi_event_create(StrataEvent* out, uint32_t flags, char* err, size_t err_len) {
+    if (out == nullptr) {
+        set_err(err, err_len, "event_create: null out");
+        return STRATA_ERROR;
+    }
+    const cudaError_t e = cudaEventCreateWithFlags((cudaEvent_t*) out, flags);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+void abi_event_destroy(StrataEvent event) {
+    if (event != nullptr) (void) cudaEventDestroy((cudaEvent_t) event);
+}
+
+StrataStatus abi_event_record(StrataEvent event, StrataStream stream, char* err, size_t err_len) {
+    const cudaError_t e = cudaEventRecord((cudaEvent_t) event, (cudaStream_t) stream);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+StrataStatus abi_event_sync(StrataEvent event, char* err, size_t err_len) {
+    const cudaError_t e = cudaEventSynchronize((cudaEvent_t) event);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+int32_t abi_event_query_done(StrataEvent event) {
+    return cudaEventQuery((cudaEvent_t) event) == cudaSuccess ? 1 : 0;
+}
+
+StrataStatus abi_event_elapsed_ms(float* out_ms, StrataEvent start, StrataEvent end,
+                                  char* err, size_t err_len) {
+    if (out_ms == nullptr) {
+        set_err(err, err_len, "event_elapsed_ms: null out");
+        return STRATA_ERROR;
+    }
+    const cudaError_t e = cudaEventElapsedTime(out_ms, (cudaEvent_t) start, (cudaEvent_t) end);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
+
+/* Uploads the instantiated exec, which is the handle the engine holds. */
+StrataStatus abi_graph_upload(StrataGraph graph, StrataStream stream, char* err, size_t err_len) {
+    auto* slot = static_cast<GraphSlot*>(graph);
+    if (slot == nullptr || slot->exec == nullptr) {
+        set_err(err, err_len, "graph_upload: graph not captured");
+        return STRATA_ERROR;
+    }
+    const cudaError_t e = cudaGraphUpload(slot->exec, (cudaStream_t) stream);
+    if (e != cudaSuccess) {
+        set_err(err, err_len, cudaGetErrorString(e));
+        return STRATA_ERROR;
+    }
+    return STRATA_OK;
+}
 #endif  // STRATA_SHIM_CUDA
 
 }  // namespace
@@ -364,6 +580,26 @@ StrataStatus strata_kernels_load(uint32_t abi_version, StrataKernels* out, char*
     out->memcpy_d2h_async = abi_memcpy_d2h_async;
     out->memcpy_default = abi_memcpy_default;
     out->device_sync = abi_device_sync;
+    out->get_device = abi_get_device;
+    out->get_last_error = abi_get_last_error;
+    out->peek_last_error = abi_peek_last_error;
+    out->mem_get_info = abi_mem_get_info;
+    out->host_register = abi_host_register;
+    out->host_unregister = abi_host_unregister;
+    out->host_get_device_pointer = abi_host_get_device_pointer;
+    out->memset_dev = abi_memset_dev;
+    out->memset_async = abi_memset_async;
+    out->memcpy2d_async = abi_memcpy2d_async;
+    out->stream_create_with_flags = abi_stream_create_with_flags;
+    out->stream_sync = abi_stream_sync;
+    out->stream_wait_event = abi_stream_wait_event;
+    out->event_create = abi_event_create;
+    out->event_destroy = abi_event_destroy;
+    out->event_record = abi_event_record;
+    out->event_sync = abi_event_sync;
+    out->event_query_done = abi_event_query_done;
+    out->event_elapsed_ms = abi_event_elapsed_ms;
+    out->graph_upload = abi_graph_upload;
     /* sampler + coupled-draft slots land in Phase 2 alongside the kernel calls
      * they forward to; a shim build that lacks them leaves them NULL per the
      * append-only contract, and the Rust core falls back. */
