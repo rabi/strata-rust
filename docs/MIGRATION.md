@@ -500,3 +500,43 @@ arithmetic — ~150 of its 725 lines) still folds in behind an `Arena` trait; th
 the same module's second half and has not moved yet.
 
 96 workspace tests (95 before this module), 0 clippy warnings, fmt clean.
+
+**Phase 2, module 5b — done: `pinned.cu`'s deterministic core ->
+`strata-core::pinned`.** The gate worked because `pinned.cu` has no `__global__`
+and no `__device__` in it — it is host code that *calls* the runtime — so g++
+compiles it against the stub headers with `-x c++` and the harness calls the real
+functions. What moved: the pin cap, the slice bounds, the read plan with its
+per-layer FNV-1a, and the unbuffered gate. What did not: mmap, madvise, hugepages,
+the working-set lock, the timed probes — the platform boundary itself.
+
+The `Arena` trait this was going to be folded in behind turned out not to be
+needed. `load_experts_ranges` takes its destination buffer from the caller, so the
+seam is a `&mut [u8]`, not a trait. The trait belongs to the arena *lifecycle*,
+which has not moved.
+
+`tools/pinned_corpus.cpp` prints 25 observations; the timing fields are excluded
+because they measure the machine. The fixture files are embedded in the golden as
+hex and `tests/pinned_corpus.rs` rebuilds them.
+
+What the corpus caught, all of it in the Rust:
+
+- The checksum vector is indexed by layer, not appended to. The first version
+  pushed, and every success case came back with double the entries.
+- The checksums are only moved on the **success** path — a refused load reports
+  none — while `bytes` and `layers` are filled before the read starts and so
+  survive the failure. Two fields zeroed on error, two not, and the difference is
+  the whole contract with the caller.
+- `atoi("abc")` is `0`, and `0` is not negative, so a garbage
+  `STRATA_ARENA_PIN_GIB` pins zero GiB. Only an empty value means unset.
+- Seeking past EOF on a regular file *succeeds*. The read is what reports it, so
+  the "seek failed" message is unreachable on that path — the refusal that fires is
+  the short read, naming the offset the seek landed on.
+- The plan is thread-count independent: the one-thread and four-thread cases hash
+  identically. That is what lets the port run it serially without changing an answer
+  — the parallelism stays with whatever owns the destination buffer, and `threads`
+  is kept in the signature because the C++ has it.
+
+The `#ifdef _WIN32` branches (`sliced_pin_limit`, the unbuffered `ReadFile` path,
+the DXGI budget) are compiled out here and are **not** covered by this golden.
+
+99 workspace tests (96 before this module), 0 clippy warnings, fmt clean.

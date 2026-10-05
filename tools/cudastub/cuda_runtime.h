@@ -86,4 +86,10 @@ cudaError_t cudaHostUnregister(void*);
 cudaError_t cudaHostGetDevicePointer(void**, void*, unsigned int);
 cudaError_t cudaMemcpy2DAsync(void*, size_t, const void*, size_t, size_t, size_t, cudaMemcpyKind,
                               cudaStream_t);
-}
+
+// The real header has template overloads for the void** allocators.
+}  // extern "C"
+
+template <class T> cudaError_t cudaMalloc(T** p, size_t n) { return cudaMalloc((void**) p, n); }
+template <class T> cudaError_t cudaHostAlloc(T** p, size_t n, unsigned int f) { return cudaHostAlloc((void**) p, n, f); }
+

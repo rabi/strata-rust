@@ -15,6 +15,7 @@ pub mod host_memory;
 pub mod layout;
 pub mod native_dense;
 pub mod native_mm;
+pub mod pinned;
 pub mod sampler;
 pub mod weights;
 
@@ -25,7 +26,14 @@ pub const FNV_PRIME: u64 = 1_099_511_628_211;
 
 /// fnv1a64 over a byte range, the fingerprint the snapshot contract reports.
 pub fn fnv(bytes: &[u8]) -> u64 {
-    let mut h = FNV_OFFSET;
+    fnv_seeded(bytes, FNV_OFFSET)
+}
+
+/// The same with an explicit seed - `pinned.cu`'s `fnv1a64(p, n, seed)`, which the
+/// read plan chains per chunk.
+#[must_use]
+pub fn fnv_seeded(bytes: &[u8], seed: u64) -> u64 {
+    let mut h = seed;
     for &b in bytes {
         h ^= u64::from(b);
         h = h.wrapping_mul(FNV_PRIME);
