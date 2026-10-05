@@ -6,6 +6,7 @@ license.workspace = true
 description = "Engine core pieces in Rust: verify-window history, coupled draft arithmetic"
 
 [dependencies]
+strata-artifact = { path = "../strata-artifact" }
 
 [lints]
 workspace = true

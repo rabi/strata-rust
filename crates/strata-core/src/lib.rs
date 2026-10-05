@@ -12,7 +12,10 @@ pub mod conversation_state;
 pub mod coupled_draft;
 pub mod host_memory;
 pub mod layout;
+pub mod native_dense;
+pub mod native_mm;
 pub mod sampler;
+pub mod weights;
 
 /// Strata's fingerprint seed and prime (`pinned.cu`'s fnv1a64). Shared by the
 /// snapshot read-back check and every corpus fingerprint.

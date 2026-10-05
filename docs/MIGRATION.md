@@ -390,3 +390,40 @@ is a data contract that never calls through a pointer. Checked with
 - The reader never mmaps (§6).
 - Phase 1 is the Python server because the pipe protocol is already a process
   boundary — the one place a whole subsystem can be swapped with zero engine risk.
+
+**Phase 2, module 4 — done: `native_dense.cpp` + `weights.cpp` ->
+`strata-core::{native_dense, weights, native_mm}`.** 674 C++ lines, 44 CUDA calls
+between them, 7 distinct symbols each — all of them slots the Phase-0 vtable already
+has, so this module added no ABI. It is the first ported module that touches the
+GGUF reader (`native_dense.cpp` includes `gguf_reader.hpp`), so `strata-core` now
+depends on `strata-artifact`, which is the direction the C++ already went and which
+still leaves `strata-artifact` dependency-free.
+
+Neither file had a C++ test to transcribe, so the gate was built for the purpose:
+`tools/native_dense_corpus.cpp` compiles the real `.cpp` files on the host with the
+CUDA calls `--wrap`'ped onto one slab, takes the block sizes from `ggml-common.h`
+(`GGML_COMMON_DECL_C`, so no CUDA headers are needed), and runs five scenarios —
+the byte tables, the two pack fixtures, every tensor kind the loader can meet, every
+refusal message, the split arbitration, the layer range, and the span checks — and
+prints 426 lines. The fixture files it writes are embedded in the golden as hex, so
+`tests/native_dense_corpus.rs` rebuilds them and replays the whole thing through the
+Rust port. The two line streams are identical.
+
+Three things the replay caught that a unit test would not, all of them in the Rust:
+
+- `sscanf` reports the number of conversions it performed, so a row with trailing
+  fields reports the format's own width (19), not its field count. The Rust counted
+  fields, which turned every well-formed row of the real index format into a refusal.
+- `atoi(name + 4)` reads the leading digits and stops, so `blk.2.attn_q.weight` is
+  layer 2. The Rust parsed the whole tail, failed, and fell back to 0 — which put a
+  layer-2 tensor inside a `(0, 1)` range.
+- The exact fp16 -> f32 widening computed `ex - 15 + 127` unsigned and underflowed for
+  every exponent below 15. It is `ex + 112`.
+
+One divergence is deliberate and is not a bug: the C++ threads one `err` string
+through `WeightTable::load` and `NativeDense::load`, and `check_architecture` assigns
+its result to it, so a load that reaches a valid architecture CLEARS a message an
+earlier call left there. The Rust returns `Result` instead; the harness models the
+clearing where the C++ did it, and the golden line records the behaviour.
+
+84 workspace tests, 0 clippy warnings, fmt clean.

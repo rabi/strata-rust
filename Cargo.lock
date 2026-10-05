@@ -9,6 +9,9 @@ version = "0.1.0"
 [[package]]
 name = "strata-core"
 version = "0.1.0"
+dependencies = [
+ "strata-artifact",
+]
 
 [[package]]
 name = "strata-device"

@@ -139,33 +139,58 @@ pub fn tensor_payload_bytes(t: &TensorInfo) -> u64 {
 /// A bounds-checked reader over a file: every read is checked, so a truncated or
 /// corrupt file produces a precise error rather than a panic. Only the header
 /// region is read; the data section is addressed by file offset.
-struct Cursor {
-    file: File,
+struct Cursor<'a> {
+    src: Src<'a>,
     pos: u64,
     size: u64,
 }
 
-impl Cursor {
-    fn new(path: &Path) -> Result<(Cursor, u64), String> {
+enum Src<'a> {
+    File(File),
+    /// a GGUF image already in memory, read from `from_bytes`
+    Mem(&'a [u8]),
+}
+
+impl<'a> Cursor<'a> {
+    fn new(path: &Path) -> Result<(Cursor<'static>, u64), String> {
         let file = File::open(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
         let size = file
             .metadata()
             .map_err(|e| format!("stat failed: {e}"))?
             .len();
-        Ok((Cursor { file, pos: 0, size }, size))
+        Ok((
+            Cursor {
+                src: Src::File(file),
+                pos: 0,
+                size,
+            },
+            size,
+        ))
+    }
+
+    fn mem(buf: &'a [u8]) -> Cursor<'a> {
+        Cursor {
+            src: Src::Mem(buf),
+            pos: 0,
+            size: buf.len() as u64,
+        }
     }
 
     fn take(&mut self, n: usize) -> Result<Vec<u8>, String> {
         if self.pos + n as u64 > self.size {
             return Err("GGUF: unexpected end of file in header".into());
         }
-        self.file
-            .seek(SeekFrom::Start(self.pos))
-            .map_err(|e| format!("seek failed: {e}"))?;
-        let mut buf = vec![0u8; n];
-        self.file
-            .read_exact(&mut buf)
-            .map_err(|e| format!("read failed: {e}"))?;
+        let buf = match &mut self.src {
+            Src::File(f) => {
+                f.seek(SeekFrom::Start(self.pos))
+                    .map_err(|e| format!("seek failed: {e}"))?;
+                let mut b = vec![0u8; n];
+                f.read_exact(&mut b)
+                    .map_err(|e| format!("read failed: {e}"))?;
+                b
+            }
+            Src::Mem(b) => b[self.pos as usize..][..n].to_vec(),
+        };
         self.pos += n as u64;
         Ok(buf)
     }
@@ -350,84 +375,56 @@ pub struct GgufFile {
     version: u32,
     tensors: Vec<TensorInfo>,
     meta: BTreeMap<String, MetaValue>,
+    /// the whole file, when `open_memory` read it in; `None` for `open`, which
+    /// keeps only the header and re-opens the file for every payload
+    image: Option<Vec<u8>>,
 }
 
 impl GgufFile {
     pub fn open(path: impl AsRef<Path>) -> Result<GgufFile, String> {
         let path = path.as_ref();
         let (mut c, size) = Cursor::new(path)?;
-        let magic = c
-            .read_u32()
-            .map_err(|_| "not a GGUF file (bad magic)".to_string())?;
-        if magic != GGUF_MAGIC {
-            return Err("not a GGUF file (bad magic)".into());
-        }
-        let version = c.read_u32()?;
-        if version != GGUF_V3 {
-            return Err(format!("GGUF v{version}, this reader handles v3"));
-        }
-        let n_tensors = c.read_u64()?;
-        let n_kv = c.read_u64()?;
-
-        let mut meta = BTreeMap::new();
-        for _ in 0..n_kv {
-            let key = c.read_str()?;
-            let t = MetaType::from_u32(c.read_u32()?)?;
-            let v = read_value(&mut c, t, 0)?;
-            meta.insert(key, v);
-        }
-
-        // GGUF has no index to arbitrate between two tensors of one name: find() is
-        // first-match, so a duplicate would silently win by position. Refuse the file
-        // at open instead, naming the tensor and the file.
-        let mut tensors = Vec::new();
-        let mut names = std::collections::BTreeSet::new();
-        for _ in 0..n_tensors {
-            let name = c.read_str()?;
-            if !names.insert(name.clone()) {
-                return Err(format!(
-                    "GGUF: duplicate tensor name '{name}' in {}",
-                    path.display()
-                ));
-            }
-            let nd = c.read_u32()?;
-            if nd == 0 || nd > 4 {
-                return Err(format!("GGUF: bad n_dims for {name}"));
-            }
-            let mut shape = Vec::with_capacity(nd as usize);
-            for _ in 0..nd {
-                shape.push(c.read_u64()?);
-            }
-            let dtype = c.read_u32()?;
-            let offset = c.read_u64()?;
-            tensors.push(TensorInfo {
-                name,
-                shape,
-                dtype,
-                offset,
-            });
-        }
-
-        let mut alignment = 32;
-        if let Some(a) = meta.get("general.alignment") {
-            if a.u != 0 {
-                alignment = a.u;
-            }
-        }
-        let data_start = c.pos().div_ceil(alignment) * alignment;
-        if data_start > size {
-            return Err("GGUF: data section starts past EOF".into());
-        }
-
+        let head = read_header(&mut c, size, &path.display().to_string())?;
         Ok(GgufFile {
             path: path.to_path_buf(),
             size,
-            data_start,
-            alignment,
-            version,
-            tensors,
-            meta,
+            data_start: head.data_start,
+            alignment: head.alignment,
+            version: head.version,
+            tensors: head.tensors,
+            meta: head.meta,
+            image: None,
         })
+    }
+
+    /// `open`, but the whole file is kept in memory so `tensor_bytes` can hand
+    /// out a borrowed slice. For a shard small enough to hold; a real model's
+    /// shards are memory-mapped by the loader instead.
+    pub fn open_memory(path: impl AsRef<Path>) -> Result<GgufFile, String> {
+        let path = path.as_ref();
+        let bytes =
+            std::fs::read(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+        let size = bytes.len() as u64;
+        let mut c = Cursor::mem(&bytes);
+        let head = read_header(&mut c, size, &path.display().to_string())?;
+        Ok(GgufFile {
+            path: path.to_path_buf(),
+            size,
+            data_start: head.data_start,
+            alignment: head.alignment,
+            version: head.version,
+            tensors: head.tensors,
+            meta: head.meta,
+            image: Some(bytes),
+        })
+    }
+
+    /// A tensor's payload as bytes, not an address: `None` unless the file was
+    /// opened by `open_memory`, or its span runs past the end of what was read.
+    pub fn tensor_bytes(&self, t: &TensorInfo) -> Option<&[u8]> {
+        let n = tensor_payload_bytes(t) as usize;
+        let start = (self.data_start + t.offset) as usize;
+        self.image.as_ref()?.get(start..start + n)
     }
 
     pub fn path(&self) -> &Path {
@@ -486,6 +483,88 @@ impl GgufFile {
     pub fn tensor_file_offset(&self, t: &TensorInfo) -> u64 {
         self.data_start + t.offset
     }
+}
+
+/// Everything a GGUF header holds except the file it came from.
+struct Header {
+    version: u32,
+    data_start: u64,
+    alignment: u64,
+    tensors: Vec<TensorInfo>,
+    meta: BTreeMap<String, MetaValue>,
+}
+
+/// Magic, version, metadata and tensor directory — the whole header, from either
+/// cursor. `src_name` only appears in the duplicate-tensor message.
+fn read_header(c: &mut Cursor<'_>, size: u64, src_name: &str) -> Result<Header, String> {
+    let magic = c
+        .read_u32()
+        .map_err(|_| "not a GGUF file (bad magic)".to_string())?;
+    if magic != GGUF_MAGIC {
+        return Err("not a GGUF file (bad magic)".into());
+    }
+    let version = c.read_u32()?;
+    if version != GGUF_V3 {
+        return Err(format!("GGUF v{version}, this reader handles v3"));
+    }
+    let n_tensors = c.read_u64()?;
+    let n_kv = c.read_u64()?;
+
+    let mut meta = BTreeMap::new();
+    for _ in 0..n_kv {
+        let key = c.read_str()?;
+        let t = MetaType::from_u32(c.read_u32()?)?;
+        let v = read_value(c, t, 0)?;
+        meta.insert(key, v);
+    }
+
+    // GGUF has no index to arbitrate between two tensors of one name: find() is
+    // first-match, so a duplicate would silently win by position. Refuse the file
+    // at open instead, naming the tensor and the file.
+    let mut tensors = Vec::new();
+    let mut names = std::collections::BTreeSet::new();
+    for _ in 0..n_tensors {
+        let name = c.read_str()?;
+        if !names.insert(name.clone()) {
+            return Err(format!(
+                "GGUF: duplicate tensor name '{name}' in {src_name}"
+            ));
+        }
+        let nd = c.read_u32()?;
+        if nd == 0 || nd > 4 {
+            return Err(format!("GGUF: bad n_dims for {name}"));
+        }
+        let mut shape = Vec::with_capacity(nd as usize);
+        for _ in 0..nd {
+            shape.push(c.read_u64()?);
+        }
+        let dtype = c.read_u32()?;
+        let offset = c.read_u64()?;
+        tensors.push(TensorInfo {
+            name,
+            shape,
+            dtype,
+            offset,
+        });
+    }
+
+    let mut alignment = 32;
+    if let Some(a) = meta.get("general.alignment") {
+        if a.u != 0 {
+            alignment = a.u;
+        }
+    }
+    let data_start = c.pos().div_ceil(alignment) * alignment;
+    if data_start > size {
+        return Err("GGUF: data section starts past EOF".into());
+    }
+    Ok(Header {
+        version,
+        data_start,
+        alignment,
+        tensors,
+        meta,
+    })
 }
 
 /// The shards of one model, opened together; tensors are looked up across all of
