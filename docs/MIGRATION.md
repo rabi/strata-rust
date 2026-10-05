@@ -271,6 +271,33 @@ before it shipped. The port adds one check the C++ could not make portably: on
 Linux the provider is not allowed to say unknown, because /proc/meminfo is
 always there. 67 workspace tests, 0 clippy, fmt clean.
 
+**Phase 2, module 2 — done: `layout.cpp` -> `strata-core::layout`.** 173 C++
+lines, zero CUDA symbols, and no C++ test to transcribe, so the gate is a spec
+harness built for the purpose (`tools/layout_corpus.cpp`): it runs the real
+`layout.cpp` and prints the byte plan for every shape the port claims to
+reproduce, and `tests/layout_corpus.rs` replays the same shapes and compares. 14
+golden lines, checked in. The same pattern — build a harness when no test exists —
+is what every later module without a C++ test will use.
+
+**Phase 2, module 3 — done: `conversation_state.cpp` + `conversation_snapshot.cpp`
+-> `strata-core::{conversation, conversation_kv, conversation_state}`.** 573 C++
+lines, 15 CUDA calls between them, all of them behind one seam: the `Device` trait
+(read/write for K/V blocks, read/write for the running state, sync, the two
+residency hooks). The core stays pointer-free — device memory is an opaque address
+the core selects and never dereferences — so the same code runs against the shim on
+a GPU and against named byte buffers on the host. The gate is
+`tools/conversation_corpus.cpp`: it compiles the real `.cpp` files against stub CUDA
+symbols, runs 24 fixtures (every format x expert-count x zero-QSA x ple combination)
+through the byte estimates, the validation rejections, the fault-injected transfer
+sequences and the read-back verification, and prints 2,750 lines. The Rust replay
+matches all of them byte for byte — including the error strings, the exact copy
+sequence (buffer, offset, length), and the fnv1a64 of every buffer after every phase.
+Two things the replay caught that a unit test would not: the running-state copies
+address each layer's OWN buffer at offset 0 while the checkpoint's vector is the
+concatenated one, and libstdc++ copy-construction allocates exactly `size`, which is
+a different capacity from growing to it — and `bytes()` counts capacity, so the
+difference is a real admission number. 75 workspace tests, 0 clippy, fmt clean.
+
 **Phase 3 — `generate.cpp` last.** It is 6,913 lines, it is the integration
 point (CLI, pipe protocol, prefill orchestration, image handling), and it is the
 single most CUDA-coupled file in group B (340 uses, 50 distinct symbols). Porting
