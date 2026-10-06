@@ -55,6 +55,7 @@ stays green on boxes with no shim build.
 | `strata-spec` | speculation control: `Controller`, `DraftPolicy`, `SuffixDrafter` | `src/spec`, `include/strata/spec` |
 | `strata-core` | host-side sampler math: `penalty_rows`, coupled-draft cell/ring | `include/strata/core/coupled_draft.hpp`, `include/strata/kernels/sampler.hpp` |
 | `strata-core::ngram` | the SSD n-gram table reader: row cache, job build, stats — over an `Io` trait the corpus scripts | `src/ngram/ple_reader.cpp` |
+| `strata-core::expert_cache` | the VRAM expert tier: slot storage, residency table, admission, the segmented arena — over a `Device` trait the corpus scripts | `src/core/expert_cache.cpp` |
 | `strata-artifact` | GGUF v3 reader + split-shard resolver | `include/strata/artifact/gguf_reader.hpp`, `gguf_split.hpp` |
 | `strata-device` | the kernel/device ABI as `repr(C)` types, header, `dlopen` loader (`shim.rs`) | the boundary between `src/core` and `src/kernels` |
 | `strata-probe` | binary: drives the shim end-to-end, cross-validates against C++ | exercises `include/strata_kernels.h` |

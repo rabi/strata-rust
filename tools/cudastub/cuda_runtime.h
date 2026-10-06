@@ -24,7 +24,11 @@ cudaError_t cudaDeviceSynchronize(void);
 cudaError_t cudaGetLastError(void);
 #define cudaErrorNotReady_unused 1
 #ifndef CUDART_VERSION
-#define CUDART_VERSION 12040u
+// 12050, not the older 12040 the stub started on: that puts the corpus on
+// cudaGetDriverEntryPoint, and every CUDA deployment this engine runs on is 12.5+
+// and takes cudaGetDriverEntryPointByVersion. The stub must exercise the path the
+// product takes.
+#define CUDART_VERSION 12050u
 #endif
 const char* cudaGetErrorString(cudaError_t);
 }
@@ -86,6 +90,19 @@ cudaError_t cudaHostUnregister(void*);
 cudaError_t cudaHostGetDevicePointer(void**, void*, unsigned int);
 cudaError_t cudaMemcpy2DAsync(void*, size_t, const void*, size_t, size_t, size_t, cudaMemcpyKind,
                               cudaStream_t);
+
+// The driver entry-point lookup expert_cache.cpp uses to reach the VMM functions
+// without linking the driver library. The stub's fake hands back real pointers to
+// its own functions through here, so this is the seam the harness drives.
+enum cudaDriverEntryPointQueryResult {
+    cudaDriverEntryPointSuccess = 0,
+    cudaDriverEntryPointSymbolNotFound = 1,
+    cudaDriverEntryPointVersionNotSufficent = 2
+};
+enum cudaGetDriverEntryPointFlags { cudaEnableDefault = 0, cudaEnableLegacyStream = 1, cudaEnablePerThreadDefaultStream = 2 };
+cudaError_t cudaGetDriverEntryPoint(const char*, void**, unsigned long long, cudaDriverEntryPointQueryResult*);
+cudaError_t cudaGetDriverEntryPointByVersion(const char*, void**, unsigned int, cudaGetDriverEntryPointFlags,
+                                             cudaDriverEntryPointQueryResult*);
 
 // The real header has template overloads for the void** allocators.
 }  // extern "C"

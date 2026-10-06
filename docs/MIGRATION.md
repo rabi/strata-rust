@@ -664,3 +664,61 @@ until collect returns" in prose; here the reader owns the buffer, so the borrow
 checker owns that contract — which is the whole point of moving this module.
 
 102 workspace tests (101 before this module), 0 clippy warnings, fmt clean.
+
+**Phase 2, module 5 — done: `expert_cache.cpp` -> `strata-core::expert_cache`.**
+The VRAM-resident expert tier: 696 C++ lines, 51 CUDA uses, 17 distinct symbols —
+the smallest of the remaining files, which is why it is next. The device layer becomes
+a trait (`Device`), and the corpus fake is stateful: it really allocates, really
+copies, and really maps and unmaps, because unlike every corpus before it this module
+*reaches* the device layer rather than merely declaring it.
+
+The gate is `tools/expert_cache_corpus.cpp`: it links the real `expert_cache.cpp`
+against the stub CUDA headers, drives the runtime calls through `--wrap` and the
+driver's VMM entry points through the stub's entry-point lookup, and prints 85 lines.
+`tests/expert_cache_corpus.rs` replays the same scenarios over a fake with the same
+rules and matches all of them. The stub's `CUDART_VERSION` moved from 12040 to 12050
+so the corpus takes `cudaGetDriverEntryPointByVersion` — the path every real CUDA 12.5+
+deployment takes; only this file and `verify.cpp` key on it, and neither was in an
+existing golden.
+
+What the corpus pins:
+
+- The driver entry-point table is a **function-local static**: resolved once for the
+  process. So the fake varies the per-call device attribute, not the lookup — a flag
+  on the lookup would only have taken effect on the first segmented open, and the
+  golden would have been order-dependent.
+- `close()` does not reset the segment request. A cache reopened after a segmented
+  open is still segmented, and the "not segmented" refusal is unreachable for it — the
+  corpus has a separate object to reach that message.
+- `replace()` reads through a **reference into the array**, so a self-replace CLEARS
+  the entry: the second write lands on the element the first read it from.
+- The allocation is checked against the card BEFORE it is made, and a card that will
+  not answer skips the check and allocates anyway. That is the shape of error this
+  project keeps paying for: a cache that silently took less than it was asked for
+  would report a hit rate for slots it does not have.
+- `admit` never evicts, and the global path does not touch the `admitted` counter —
+  `resident()` reads `next_free` there and `admitted` under per-layer admission, so
+  the two paths report differently for the same number of claims.
+- Per-layer admission gives layer `l` the range `[l*q, (l+1)*q)` and the LAST layer the
+  remainder, so the ranges cover the arena exactly. `shrink` rounds UP to a segment,
+  `grow` rounds DOWN, and a shrink that would keep everything it already has returns
+  without touching the device.
+- `open_sized` allocates through the uniform path as "n slots of 1 byte" and then
+  overrides the slot count, the blob and the offsets — so the VRAM check runs against
+  the summed, 256-aligned size.
+- A segment that was unmapped and mapped again comes back as NEW physical memory, not
+  the old bytes. Nothing is read while a segment is unmapped (the range has no
+  backing), so the corpus only asserts the round trip.
+
+The HIP-only blocking-staging buffer is compiled out of the build the golden was made
+from and is NOT covered; in Rust it belongs to the device layer, which may stage a
+pageable source however it likes. The gfx906 build, where the segmented cache refuses
+at open, is likewise not covered.
+
+**This module needs 10 new ABI slots** — `device_get`, `device_get_attribute`,
+`mem_get_granularity`, `mem_address_reserve`/`mem_address_free`, `mem_create`/
+`mem_release`/`mem_map`/`mem_unmap`/`mem_set_access` — the first time the vtable has
+had to grow for the driver's virtual memory management. The Rust port defines the
+trait; `strata-device`'s implementation over the appended slots is the remaining half.
+
+103 workspace tests (102 before this module), 0 clippy warnings, fmt clean.

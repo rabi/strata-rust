@@ -10,6 +10,7 @@ pub mod conversation;
 pub mod conversation_kv;
 pub mod conversation_state;
 pub mod coupled_draft;
+pub mod expert_cache;
 pub mod expert_plan;
 pub mod host_memory;
 pub mod layer;

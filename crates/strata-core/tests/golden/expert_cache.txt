@@ -1,0 +1,85 @@
+CORPUS|PROFILE|read|1:2,0:0|4
+CORPUS|PROFILE|magic|read_expert_profile: /tmp/strata_ec_corpus_profile.bin does not start with STRP
+CORPUS|PROFILE|short|read_expert_profile: /tmp/strata_ec_corpus_profile.bin is too short to hold a header
+CORPUS|PROFILE|dims|read_expert_profile: /tmp/strata_ec_corpus_profile.bin is 3x3 but this model is 2x3 - it is a profile for a different artifact
+CORPUS|PROFILE|toomany|read_expert_profile: the header claims more ranked pairs than slots
+CORPUS|PROFILE|truncated|read_expert_profile: the ranked list is truncated
+CORPUS|PROFILE|range|read_expert_profile: pair 1 is (layer 5, expert 2), out of range
+CORPUS|PROFILE|empty|0|4
+CORPUS|PROFILE|write|56|53545250010000000200000003000000020000000200000001000200
+CORPUS|PROFILE|roundtrip|1:2,0:0|2
+CORPUS|PROFILE|write_range|write_expert_profile: a ranked pair is out of range
+CORPUS|PROFILE|write_fit|write_expert_profile: the model's layout does not fit the format
+CORPUS|RANK|both|0:1,1:2,0:2,1:0,1:1,0:0
+CORPUS|RANK|noheat|0:1,1:2,1:1,0:0,0:2,1:0
+CORPUS|RANK|noprior|0:1,1:2,0:2,1:0,0:0,1:1
+CORPUS|RANK|empty|0:0,0:1,0:2,1:0,1:1,1:2
+CORPUS|RANK|ties|0:0,0:1,0:2,1:0,1:1,1:2
+CORPUS|RANK|shortvec|0:0,0:1,0:2,1:0,1:1,1:2
+CORPUS|OPEN|refuse|slots0|0|ExpertCache: n_slots must be positive
+CORPUS|OPEN|refuse|slotsneg|0|ExpertCache: n_slots must be positive
+CORPUS|OPEN|refuse|layers0|0|ExpertCache: n_layers, n_expert and blob_bytes must all be positive
+CORPUS|OPEN|refuse|expert0|0|ExpertCache: n_layers, n_expert and blob_bytes must all be positive
+CORPUS|OPEN|refuse|blob0|0|ExpertCache: n_layers, n_expert and blob_bytes must all be positive
+CORPUS|OPEN|vram|ExpertCache: 8192 slots x 1310720 B = 10.00 GiB, but only 4.00 GiB of VRAM is free (20.00 GiB of 24.00 GiB total). Lower --expert-cache.
+CORPUS|OPEN|alloc|ExpertCache: cudaMalloc(0.00 GiB) failed: out of memory
+CORPUS|OPEN|infofail|the check is skipped and the allocation is made
+CORPUS|OPEN|memset|ExpertCache: cudaMemset of the slot arena failed
+CORPUS|OPEN|ok|slots=64|full=64|bytes=83886080|full_bytes=83886080|gib=0.0781|resident=0|seg=0|segbytes=0|mapped=83886080
+CORPUS|OPEN|within|1|2|64|0
+CORPUS|OPEN|bytesof|0|3932160|83886080|0
+CORPUS|SIZED|ok|slots=4|full=4|bytes=3328|full_bytes=3328|gib=0.0000|resident=0|seg=0|segbytes=0|mapped=3328
+CORPUS|SIZED|within|1|1|4
+CORPUS|SIZED|bytesof|0|3072|3328
+CORPUS|SIZED|refuse|ExpertCache: no slots
+CORPUS|SEG|open|slots=16|full=16|bytes=65536|full_bytes=65536|gib=0.0001|resident=0|seg=1|segbytes=16384|mapped=65536
+CORPUS|SEG|within|4|9|16
+CORPUS|SEG|shrink20000|slots=8|full=16|bytes=32768|full_bytes=65536|gib=0.0000|resident=0|seg=1|segbytes=16384|mapped=32768
+CORPUS|SEG|grow36000|slots=8|full=16|bytes=32768|full_bytes=65536|gib=0.0000|resident=0|seg=1|segbytes=16384|mapped=32768
+CORPUS|SEG|growall|slots=16|full=16|bytes=65536|full_bytes=65536|gib=0.0001|resident=0|seg=1|segbytes=16384|mapped=65536
+CORPUS|SEG|reopened|slots=0|full=0|bytes=0|full_bytes=0|gib=0.0000|resident=0|seg=0|segbytes=16384|mapped=0
+CORPUS|SEG|shrink_unseg|the expert cache is not segmented (the engine needs --vram-elastic)
+CORPUS|SEG|grow_unseg|the expert cache is not segmented (the engine needs --vram-elastic)
+CORPUS|SEG|createfail|ExpertCache: cudaMalloc failed: segment 3 of 4 (0.00 GiB) of the segmented cache could not be allocated
+CORPUS|SEG|nosupport|ExpertCache: --vram-elastic needs the driver's virtual memory management, which this GPU or driver does not offer
+CORPUS|SEG|granfail|ExpertCache: cannot read the driver's allocation granularity
+CORPUS|SEG|fill|1|1|2
+CORPUS|SEG|verify|1|1
+CORPUS|SEG|shrunk|slots=4|full=16|bytes=16384|full_bytes=65536|gib=0.0000|resident=0|seg=1|segbytes=16384|mapped=16384
+CORPUS|SEG|regrown|slots=16|full=16|bytes=65536|full_bytes=65536|gib=0.0001|resident=0|seg=1|segbytes=16384|mapped=65536
+CORPUS|SEG|verifyregrown|1|1
+CORPUS|ADM|global|0|1|2|0|3
+CORPUS|ADM|globalfill|4|5|-1|-1
+CORPUS|ADM|globalfull|-1|-1
+CORPUS|ADM|globalres|6|6
+CORPUS|ADM|globaloob|-1|-1|-1
+CORPUS|ADM|replace|0|0|-1
+CORPUS|ADM|selfreplace|0|-1
+CORPUS|ADM|range|0|0|2
+CORPUS|ADM|range|1|2|4
+CORPUS|ADM|range|2|4|7
+CORPUS|ADM|range_oob|0|0
+CORPUS|ADM|perlayer|0|1|-1
+CORPUS|ADM|perlayerfull|-1
+CORPUS|ADM|otherlayer|2|4
+CORPUS|ADM|lastlayer|5|6|-1
+CORPUS|ADM|perlayerres|6|7
+CORPUS|COPY|fill0|1
+CORPUS|COPY|verify0|ok
+CORPUS|COPY|fill1partial|2
+CORPUS|COPY|verifydiff|ExpertCache::verify_slot: slot 1 differs from the arena at byte 200 (of 1024)
+CORPUS|COPY|fill2big|3
+CORPUS|COPY|oob|ExpertCache::fill_slot: slot 9 is outside 0..3
+CORPUS|COPY|null|ExpertCache::fill_slot: the host blob is null
+CORPUS|COPY|block3|4
+CORPUS|COPY|blockoob|ExpertCache::fill_slot_blocking: slot outside the arena
+CORPUS|COPY|queueoob|ExpertCache::fill_slot_queued: slot outside the arena
+CORPUS|COPY|queuenull|ExpertCache::fill_slot_queued: the host blob is null
+CORPUS|COPY|copyfail|ExpertCache::fill_slot: out of memory
+CORPUS|COPY|syncok|a failed copy does not poison the queue
+CORPUS|COPY|syncfail|ExpertCache::sync_queued: out of memory
+CORPUS|COPY|verifyzero|ExpertCache::verify_slot: slot 0 differs from the arena at byte 0 (of 1024)
+CORPUS|COPY|slotbounds|1|0|0
+CORPUS|CLOSE|before|1|1|0
+CORPUS|CLOSE|after|0|0|0|0|-1|0
+CORPUS|CLOSE|reopen|1024|0
