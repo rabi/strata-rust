@@ -17,6 +17,7 @@ pub mod layout;
 pub mod mtp;
 pub mod native_dense;
 pub mod native_mm;
+pub mod ngram;
 pub mod pinned;
 pub mod sampler;
 pub mod weights;

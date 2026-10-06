@@ -606,3 +606,61 @@ What the corpus pins:
   rounds the window up to 64, so a window of 32 is a capacity of 64.
 
 101 workspace tests (100 before this module), 0 clippy warnings, fmt clean.
+
+**Phase 2, module 8 — done: `ple_reader.cpp`'s deterministic core ->
+`strata-core::ngram`.** The n-gram table reader is the `src/ngram` row of the table
+in §2: 26.8 GB of rows that never live in RAM, every one off an unbuffered 4 KiB
+read. It has zero CUDA symbols and it is the first module whose platform layer is
+already in the ABI — `file_open`/`file_submit`/`file_wait` have been slots since
+Phase 0.5 — so this port adds no ABI either. The platform layer becomes a trait
+(`Io`), which is what lets the whole reader run against a scripted file with no SSD
+underneath; `strata-device` implements the same trait over the vtable.
+
+The gate is `tools/ple_reader_corpus.cpp`: it `#include`s the real
+`ple_reader.cpp` and provides the platform definitions itself, so nothing links
+`direct_file.cpp` and no file is opened. `tests/ple_reader_corpus.rs` replays the
+same scenarios through the Rust port. 84 lines, identical.
+
+Unlike every corpus before it, this one keeps the timing fields. The reason is that
+the harness replaces the clock rather than measuring it: `now_us()` is a pure read of
+a virtual clock, and only `wait()` moves it — a blocking wait runs it on to the
+earliest outstanding read's scripted completion time, a poll moves it a fixed 100 µs.
+So `wait_us`, `read_us_sum`, the percentile and the `late_injected` count are
+reproducible here, and they are in the golden. The io_thread worker loop is the part
+that is *not* covered — it is the scheduling the scripted clock cannot pin down — so
+the corpus drives the caller-thread arm and calls the worker's own functions
+directly.
+
+What the corpus pins:
+
+- `release_delayed` indexes `inflight` by tag unguarded, and `process` is the only
+  place the tag is range-checked. That is not an oversight: nothing reaches the
+  delayed list without having passed that check. Feeding a bad tag straight to
+  `release_delayed` is not a reachable state — under libstdc++ bounds assertions it
+  aborts — so the corpus feeds it through `process`, where it belongs.
+- `close()` drains outstanding reads by handing their slots back *without applying
+  them*: no output write, no cache insert, no stats. Whatever was in flight when the
+  reader closed is gone. And `close()` resets the cache but not the error, the
+  injected delay, the ticket counter, the ring position, the stats or the rng — a
+  reader reopened on the same instance keeps its counters.
+- Out-of-range rows produce zero bytes and never reach the page map, so they are
+  never deduped and never become jobs. A cache hit is served inside `issue` for the
+  same reason. `pending` counts jobs, not rows: a ticket whose every row came from
+  the cache has `pending == 0` and `collect` returns at once.
+- A deduped job's length is the **max** of its members' lengths — one row that
+  straddles a page boundary drags the whole group's window to 2 pages. The sort by
+  offset happens after the dedup, and `free_slots` is a stack seeded high to low, so
+  the first slot handed out is the last one.
+- A short read inside the table is a refusal, not a zero fill: `in_page + row_bytes
+  > bytes` means the row the caller asked for is not all there.
+- A `submit` failure on a keep-alive job turns the keep-alive off and carries on;
+  the same failure on a row job fails the reader and cancels everything queued.
+- The keep-alive is gated on `threaded`. The harness sets the flag rather than
+  starting a thread it could not schedule.
+
+One deliberate difference, not a bug: `issue` takes an `OutId` registered on the
+reader instead of a caller-owned buffer. The C++ documents "out_raw must stay valid
+until collect returns" in prose; here the reader owns the buffer, so the borrow
+checker owns that contract — which is the whole point of moving this module.
+
+102 workspace tests (101 before this module), 0 clippy warnings, fmt clean.
