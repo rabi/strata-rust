@@ -573,3 +573,36 @@ What the corpus pins:
   lines that look like they should agree and do not.
 
 100 workspace tests (99 before this module), 0 clippy warnings, fmt clean.
+
+**Phase 2, module 7 — done: `mtp.cpp`'s deterministic core -> `strata-core::mtp`.**
+The runtime index parser, the required-tensor gate, the K/V ring decision, the
+arena carve, and `bind_bytes`. `tools/mtp_corpus.cpp` drives the real
+`MtpDrafter::load` over fixture directories with the CUDA seam faked against host
+memory (`--wrap`), and the golden is 122 lines of its output.
+
+Six size helpers live in `.cu` files (`native_q8_1_bytes`,
+`moe_hit_grouped_scratch_bytes`, `coupled_draft_scratch_bytes`, plus the three
+`layer` transcribes). The corpus builds without nvcc, so those are transcribed on
+both sides and a misread of one is invisible here. Everything else is the real
+code, and every other unresolved kernel symbol aborts with its name rather than
+jumping to null.
+
+What the corpus pins:
+
+- The drafter's `Bump` aligns to **256**, not the 16 `layer`'s `Cursor` uses. Two
+  allocators in one file's neighbourhood, and using the wrong one moves every
+  offset after the first region.
+- The required-tensor gate matches name **and kind**. A tensor the index lists as
+  `f32` is not found by the `q8_0` gate, which is the whole point of the check.
+- `bind_bytes` only counts `draft_vocab.bin` when it is at least 4 bytes **and** a
+  multiple of 4. A 2-byte file is there and is ignored.
+- The VRAM counter accumulates as it goes, so a refusal reports what was already
+  taken — the missing-tensor path reports 2,048 B, not zero. "Nothing was
+  allocated" would be a different program.
+- The allocation order is dense, experts, state, arena, and each failure has its
+  own message. The corpus fails the nth one and checks which message fires.
+- The drafter's K/V ring only bites when `qsa_set_kv_resident` is above zero; with
+  it at zero the K/V stays whole in VRAM whatever the window says. And `cap_`
+  rounds the window up to 64, so a window of 32 is a capacity of 64.
+
+101 workspace tests (100 before this module), 0 clippy warnings, fmt clean.

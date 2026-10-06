@@ -14,6 +14,7 @@ pub mod expert_plan;
 pub mod host_memory;
 pub mod layer;
 pub mod layout;
+pub mod mtp;
 pub mod native_dense;
 pub mod native_mm;
 pub mod pinned;
